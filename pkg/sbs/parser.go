@@ -12,6 +12,34 @@ var (
 	ErrLineTooShort = errors.New("line contains too few fields to be a valid SBS-1 message")
 )
 
+// parseOpt is a generic helper that converts a non-empty string using conv, returning nil on empty or error.
+func parseOpt[T any](s string, conv func(string) (T, error)) *T {
+	if s == "" {
+		return nil
+	}
+	v, err := conv(s)
+	if err != nil {
+		return nil
+	}
+	return &v
+}
+
+// parseBool parses binary/boolean flags (usually 0, 1, -1, or empty).
+func parseBool(s string) (*bool, error) {
+	if s == "" {
+		return nil, nil
+	}
+	var b bool
+	if s == "1" || strings.ToLower(s) == "true" {
+		b = true
+	} else if s == "0" || strings.ToLower(s) == "false" {
+		b = false
+	} else {
+		return nil, fmt.Errorf("invalid bool value: %s", s)
+	}
+	return &b, nil
+}
+
 // ParseMessage parses a raw comma-separated SBS-1 line into a structured Message.
 func ParseMessage(line string) (*Message, error) {
 	// Clean up line endings
@@ -37,20 +65,21 @@ func ParseMessage(line string) (*Message, error) {
 		fields[i] = strings.TrimSpace(fields[i])
 	}
 
+	msgType := MessageType(fields[0])
+
 	msg := &Message{
-		MessageType: MessageType(fields[0]),
+		MessageType: msgType,
 		HexIdent:    fields[4],
-		Callsign:    fields[10],
 	}
 
 	// 1. Parse TransmissionType (Field 1 - optional, only for MSG)
-	if fields[1] != "" {
-		tt, err := strconv.Atoi(fields[1])
-		if err == nil {
-			val := TransmissionType(tt)
-			msg.TransmissionType = &val
+	msg.TransmissionType = parseOpt(fields[1], func(s string) (TransmissionType, error) {
+		tt, err := strconv.Atoi(s)
+		if err != nil {
+			return 0, err
 		}
-	}
+		return TransmissionType(tt), nil
+	})
 
 	// 2. Parse SessionID (Field 2)
 	if fields[2] != "" {
@@ -86,97 +115,61 @@ func ParseMessage(line string) (*Message, error) {
 		}
 	}
 
-	// 7. Parse StatusChange if MessageType is STA (Field 10/11 depending on parsing interpretation)
-	// Standard SBS-1 outputs SL/RM/PL/AD status in field 10 (callsign slot) for STA type.
-	if msg.MessageType == MsgTypeSTA && fields[10] != "" {
-		sc := StatusChange(fields[10])
-		msg.StatusChange = &sc
-		msg.Callsign = "" // Don't interpret status code as callsign
-	}
-
-	// 7b. Parse Callsign if MessageType is ID
-	if msg.MessageType == MsgTypeID && fields[10] != "" {
+	// 7. Parse field 10: Callsign or StatusChange depending on MessageType
+	switch msgType {
+	case MsgTypeSTA:
+		if fields[10] != "" {
+			sc := StatusChange(fields[10])
+			msg.StatusChange = &sc
+		}
+	default:
 		msg.Callsign = fields[10]
 	}
 
 	// 8. Parse Altitude (Field 11)
-	if fields[11] != "" {
-		val, err := strconv.Atoi(fields[11])
-		if err == nil {
-			msg.Altitude = &val
-		}
-	}
+	msg.Altitude = parseOpt(fields[11], func(s string) (int, error) {
+		return strconv.Atoi(s)
+	})
 
 	// 9. Parse GroundSpeed (Field 12)
-	if fields[12] != "" {
-		val, err := strconv.ParseFloat(fields[12], 64)
-		if err == nil {
-			msg.GroundSpeed = &val
-		}
-	}
+	msg.GroundSpeed = parseOpt(fields[12], func(s string) (float64, error) {
+		return strconv.ParseFloat(s, 64)
+	})
 
 	// 10. Parse Track (Field 13)
-	if fields[13] != "" {
-		val, err := strconv.ParseFloat(fields[13], 64)
-		if err == nil {
-			msg.Track = &val
-		}
-	}
+	msg.Track = parseOpt(fields[13], func(s string) (float64, error) {
+		return strconv.ParseFloat(s, 64)
+	})
 
 	// 11. Parse Latitude (Field 14)
-	if fields[14] != "" {
-		val, err := strconv.ParseFloat(fields[14], 64)
-		if err == nil {
-			msg.Latitude = &val
-		}
-	}
+	msg.Latitude = parseOpt(fields[14], func(s string) (float64, error) {
+		return strconv.ParseFloat(s, 64)
+	})
 
 	// 12. Parse Longitude (Field 15)
-	if fields[15] != "" {
-		val, err := strconv.ParseFloat(fields[15], 64)
-		if err == nil {
-			msg.Longitude = &val
-		}
-	}
+	msg.Longitude = parseOpt(fields[15], func(s string) (float64, error) {
+		return strconv.ParseFloat(s, 64)
+	})
 
 	// 13. Parse VerticalRate (Field 16)
-	if fields[16] != "" {
-		val, err := strconv.Atoi(fields[16])
-		if err == nil {
-			msg.VerticalRate = &val
-		}
-	}
+	msg.VerticalRate = parseOpt(fields[16], func(s string) (int, error) {
+		return strconv.Atoi(s)
+	})
 
 	// 14. Parse Squawk (Field 17)
 	msg.Squawk = fields[17]
 
-	// Helper for parsing binary/boolean flags (usually 0, 1, -1, or empty)
-	parseBoolFlag := func(s string) *bool {
-		if s == "" {
-			return nil
-		}
-		var b bool
-		if s == "1" || strings.ToLower(s) == "true" {
-			b = true
-		} else if s == "0" || strings.ToLower(s) == "false" {
-			b = false
-		} else {
-			return nil
-		}
-		return &b
-	}
-
 	// 15. Parse Alert (Field 18)
-	msg.Alert = parseBoolFlag(fields[18])
+	msg.Alert, _ = parseBool(fields[18])
 
 	// 16. Parse Emergency (Field 19)
-	msg.Emergency = parseBoolFlag(fields[19])
+	msg.Emergency, _ = parseBool(fields[19])
 
 	// 17. Parse SPI (Field 20)
-	msg.SPI = parseBoolFlag(fields[20])
+	msg.SPI, _ = parseBool(fields[20])
 
 	// 18. Parse IsOnGround (Field 21)
-	msg.IsOnGround = parseBoolFlag(fields[21])
+	msg.IsOnGround, _ = parseBool(fields[21])
 
 	return msg, nil
 }

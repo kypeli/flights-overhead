@@ -11,6 +11,7 @@ type Aircraft struct {
 	GroundSpeed  float64   `json:"ground_speed,omitempty"`
 	Track        float64   `json:"track,omitempty"`
 	HasTrack     bool      `json:"-"`
+	HasPosition  bool      `json:"-"`
 	Latitude     float64   `json:"latitude,omitempty"`
 	Longitude    float64   `json:"longitude,omitempty"`
 	VerticalRate int       `json:"vertical_rate,omitempty"`
@@ -19,6 +20,6 @@ type Aircraft struct {
 	LastSeen     time.Time `json:"last_seen"`
 	MessageCount int64     `json:"message_count"`
 	FirstSeen    time.Time `json:"first_seen"`
-	Manufacturer string
-	Model        string
+	Manufacturer string    `json:"manufacturer,omitempty"`
+	Model        string    `json:"model,omitempty"`
 }

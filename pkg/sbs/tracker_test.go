@@ -105,13 +105,13 @@ func TestTracker_CleanupOrphans(t *testing.T) {
 	})
 
 	// Manually tweak "EXPIRED" to be old (UpdateState defaults to GeneratedTime)
-	ac, exists := tracker.aircrafts["EXPIRED"]
+	ac, exists := tracker.byHex["EXPIRED"]
 	if exists {
 		ac.LastSeen = time.Now().Add(-10 * time.Minute)
 	}
 
 	// Run cleanup with max age of 5 minutes
-	evicted := tracker.CleanupOrphans(5 * time.Minute)
+	evicted := tracker.EvictStale(5 * time.Minute)
 	if evicted != 1 {
 		t.Errorf("expected 1 aircraft to be cleaned up, got %d", evicted)
 	}

@@ -22,22 +22,66 @@ import (
 //go:embed dashboard.html
 var dashboardHTML []byte
 
+const (
+	sseChanBuffer = 10
+)
+
+// config holds all runtime configuration parsed from CLI flags.
+type config struct {
+	trackerAddr string
+	httpAddr    string
+	expire      time.Duration
+	report      time.Duration
+	lat, lon    float64
+	debug       bool
+}
+
+// parseConfig parses all CLI flags and returns a populated config.
+func parseConfig() config {
+	addrFlag := flag.String("addr", "localhost:30003", "ADS-B receiver TCP address (host:port) (deprecated: use -tracker-addr)")
+	trackerAddrFlag := flag.String("tracker-addr", "", "ADS-B receiver TCP address (host:port) to read stream from")
+	expireFlag := flag.Duration("expire", 60*time.Second, "duration after which an inactive aircraft is expired")
+	reportFlag := flag.Duration("report", 5*time.Second, "reporting frequency interval")
+	debugFlag := flag.Bool("debug", false, "enable debug logging mode")
+	httpFlag := flag.String("http", "localhost:8080", "web dashboard HTTP address (host:port)")
+	latFlag := flag.Float64("lat", 60.1699, "receiver latitude coordinate")
+	lonFlag := flag.Float64("lon", 24.9384, "receiver longitude coordinate")
+	flag.Parse()
+
+	// Resolve the target tracker TCP source address
+	trackerAddr := *addrFlag
+	if *trackerAddrFlag != "" {
+		trackerAddr = *trackerAddrFlag
+	}
+
+	return config{
+		trackerAddr: trackerAddr,
+		httpAddr:    *httpFlag,
+		expire:      *expireFlag,
+		report:      *reportFlag,
+		lat:         *latFlag,
+		lon:         *lonFlag,
+		debug:       *debugFlag,
+	}
+}
+
+// initLogger sets up the default structured logger at the appropriate level.
+func initLogger(debug bool) {
+	logLevel := slog.LevelInfo
+	if debug {
+		logLevel = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: logLevel,
+	}))
+	slog.SetDefault(logger)
+}
+
 // FlightJSON defines the web-facing telemetry representation of tracked aircraft.
 type FlightJSON struct {
-	HexIdent     string  `json:"hex_ident"`
-	Callsign     string  `json:"callsign,omitempty"`
-	Altitude     int     `json:"altitude,omitempty"`
-	GroundSpeed  float64 `json:"ground_speed,omitempty"`
-	Track        float64 `json:"track,omitempty"`
-	Latitude     float64 `json:"latitude,omitempty"`
-	Longitude    float64 `json:"longitude,omitempty"`
-	VerticalRate int     `json:"vertical_rate,omitempty"`
-	Squawk       string  `json:"squawk,omitempty"`
-	IsOnGround   bool    `json:"is_on_ground"`
-	Distance     float64 `json:"distance"`
-	Direction    string  `json:"direction,omitempty"`
-	Manufacturer string  `json:"manufacturer,omitempty"`
-	Model        string  `json:"model,omitempty"`
+	sbs.Aircraft
+	Distance  float64 `json:"distance"`
+	Direction string  `json:"direction,omitempty"`
 }
 
 // StreamPayload represents the complete live radar broadcast payload.
@@ -97,7 +141,7 @@ func (b *Broker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ch := make(chan string, 10)
+	ch := make(chan string, sseChanBuffer)
 	b.Register(ch)
 	defer b.Unregister(ch)
 
@@ -119,41 +163,32 @@ func (b *Broker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// newHTTPHandler creates an explicit ServeMux with routes registered for the dashboard and SSE broker.
+func newHTTPHandler(broker *Broker) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		w.Write(dashboardHTML)
+	})
+	mux.Handle("/events", broker)
+	return mux
+}
+
 func main() {
-	// 1. Define CLI Parameters
-	addrFlag := flag.String("addr", "localhost:30003", "ADS-B receiver TCP address (host:port) (deprecated: use -tracker-addr)")
-	trackerAddrFlag := flag.String("tracker-addr", "", "ADS-B receiver TCP address (host:port) to read stream from")
-	expireFlag := flag.Duration("expire", 60*time.Second, "duration after which an inactive aircraft is expired")
-	reportFlag := flag.Duration("report", 5*time.Second, "reporting frequency interval")
-	debugFlag := flag.Bool("debug", false, "enable debug logging mode")
-	httpFlag := flag.String("http", "localhost:8080", "web dashboard HTTP address (host:port)")
-	latFlag := flag.Float64("lat", 60.1699, "receiver latitude coordinate")
-	lonFlag := flag.Float64("lon", 24.9384, "receiver longitude coordinate")
-	flag.Parse()
-
-	// Resolve the target tracker TCP source address
-	trackerAddr := *addrFlag
-	if *trackerAddrFlag != "" {
-		trackerAddr = *trackerAddrFlag
-	}
-
-	// 2. Initialize Structured Logger
-	logLevel := slog.LevelInfo
-	if *debugFlag {
-		logLevel = slog.LevelDebug
-	}
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: logLevel,
-	}))
-	slog.SetDefault(logger)
+	cfg := parseConfig()
+	initLogger(cfg.debug)
 
 	slog.Info("starting ADS-B flights overhead tracker backend...")
 
-	// 3. Create context with cancellation for graceful shutdown
+	// Create context with cancellation for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// 4. Set up OS termination signals interceptor
+	// Set up OS termination signals interceptor
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -162,15 +197,15 @@ func main() {
 		cancel()
 	}()
 
-	// 5. Initialize client and tracker
-	client := sbs.NewClient(trackerAddr)
+	// Initialize client and tracker
+	client := sbs.NewClient(cfg.trackerAddr)
 	tracker := sbs.NewTracker()
 
-	// 6. Connect to ADS-B stream
+	// Connect to ADS-B stream
 	msgChan := client.Start(ctx)
 
-	// 7. Background tickers
-	reportTicker := time.NewTicker(*reportFlag)
+	// Background tickers
+	reportTicker := time.NewTicker(cfg.report)
 	defer reportTicker.Stop()
 
 	cleanupTicker := time.NewTicker(10 * time.Second)
@@ -179,17 +214,11 @@ func main() {
 	broadcastTicker := time.NewTicker(1 * time.Second)
 	defer broadcastTicker.Stop()
 
-	// 8. Launch embedded HTTP web server with the SSE broker
+	// Launch embedded HTTP web server with the SSE broker
 	broker := NewBroker()
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		w.Write(dashboardHTML)
-	})
-	http.Handle("/events", broker)
-
 	go func() {
-		slog.Info("starting web dashboard server...", "addr", *httpFlag)
-		if err := http.ListenAndServe(*httpFlag, nil); err != nil {
+		slog.Info("starting web dashboard server...", "addr", cfg.httpAddr)
+		if err := http.ListenAndServe(cfg.httpAddr, newHTTPHandler(broker)); err != nil {
 			slog.Error("HTTP server failed to start", "error", err)
 			cancel()
 		}
@@ -197,7 +226,7 @@ func main() {
 
 	slog.Info("listening for incoming messages...")
 
-	// 9. Main event loop
+	// Main event loop
 	for {
 		select {
 		case <-ctx.Done():
@@ -209,7 +238,7 @@ func main() {
 				slog.Info("message stream channel closed. Initiating shutdown...")
 				return
 			}
-			
+
 			// Update aircraft state with the parsed message
 			ac, isNew := tracker.UpdateState(msg)
 			if isNew {
@@ -221,15 +250,15 @@ func main() {
 			printOverheadDashboard(tracker)
 
 		case <-cleanupTicker.C:
-			// Clean up flights that haven't sent reports within the expiration threshold
-			evictedCount := tracker.CleanupOrphans(*expireFlag)
+			// Evict flights that haven't sent reports within the expiration threshold
+			evictedCount := tracker.EvictStale(cfg.expire)
 			if evictedCount > 0 {
-				slog.Info("cleaned up inactive aircraft sessions", "evicted_count", evictedCount)
+				slog.Info("evicted stale inactive aircraft sessions", "evicted_count", evictedCount)
 			}
 
 		case <-broadcastTicker.C:
 			// Broadcast latest flight telemetry to connected web clients
-			broadcastFlights(tracker, broker, *latFlag, *lonFlag, trackerAddr)
+			broadcastFlights(tracker, broker, cfg.lat, cfg.lon, cfg.trackerAddr)
 		}
 	}
 }
@@ -247,20 +276,9 @@ func broadcastFlights(tracker *sbs.Tracker, broker *Broker, receiverLat, receive
 		}
 
 		flights = append(flights, FlightJSON{
-			HexIdent:     ac.HexIdent,
-			Callsign:     ac.Callsign,
-			Altitude:     ac.Altitude,
-			GroundSpeed:  ac.GroundSpeed,
-			Track:        ac.Track,
-			Latitude:     ac.Latitude,
-			Longitude:    ac.Longitude,
-			VerticalRate: ac.VerticalRate,
-			Squawk:       ac.Squawk,
-			IsOnGround:   ac.IsOnGround,
-			Distance:     dist,
-			Direction:    direction,
-			Manufacturer: ac.Manufacturer,
-			Model:        ac.Model,
+			Aircraft:  ac,
+			Distance:  dist,
+			Direction: direction,
 		})
 	}
 
@@ -283,9 +301,11 @@ func broadcastFlights(tracker *sbs.Tracker, broker *Broker, receiverLat, receive
 	}
 
 	data, err := json.Marshal(payload)
-	if err == nil {
-		broker.Broadcast(string(data))
+	if err != nil {
+		slog.Error("failed to marshal broadcast payload", "error", err)
+		return
 	}
+	broker.Broadcast(string(data))
 }
 
 // printOverheadDashboard prints the list of currently tracked flights overhead as a formatted table.
@@ -297,17 +317,17 @@ func printOverheadDashboard(tracker *sbs.Tracker) {
 	}
 
 	fmt.Printf("\n--- Flights Overhead Tracker: %d Active Aircraft Tracked Overhead ---\n", len(active))
-	
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.Debug)
 	fmt.Fprintln(w, "ICAO HEX\tCALLSIGN\tALTITUDE (FT)\tSPEED (KT)\tTRACK (°)\tLATITUDE\tLONGITUDE\tSQUAWK\tMSGS\tLAST SEEN")
-	
+
 	now := time.Now()
 	for _, ac := range active {
 		callsign := ac.Callsign
 		if callsign == "" {
 			callsign = "------"
 		}
-		
+
 		squawk := ac.Squawk
 		if squawk == "" {
 			squawk = "----"
@@ -316,7 +336,7 @@ func printOverheadDashboard(tracker *sbs.Tracker) {
 		coordsFormat := "%.5f"
 		latStr := fmt.Sprintf(coordsFormat, ac.Latitude)
 		lonStr := fmt.Sprintf(coordsFormat, ac.Longitude)
-		if ac.Latitude == 0.0 && ac.Longitude == 0.0 {
+		if !ac.HasPosition {
 			latStr = "------"
 			lonStr = "------"
 		}

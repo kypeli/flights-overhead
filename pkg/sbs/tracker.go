@@ -7,14 +7,14 @@ import (
 
 // Tracker coordinates state tracking for a registry of active aircraft.
 type Tracker struct {
-	mu        sync.RWMutex
-	aircrafts map[string]*Aircraft
+	mu    sync.RWMutex
+	byHex map[string]*Aircraft
 }
 
 // NewTracker creates a new thread-safe Aircraft state tracker.
 func NewTracker() *Tracker {
 	return &Tracker{
-		aircrafts: make(map[string]*Aircraft),
+		byHex: make(map[string]*Aircraft),
 	}
 }
 
@@ -32,7 +32,7 @@ func (t *Tracker) UpdateState(msg *Message) (Aircraft, bool) {
 	if msg.MessageType == MsgTypeSTA && msg.StatusChange != nil {
 		sc := *msg.StatusChange
 		if sc == StatusRemove || sc == StatusAircraftDelete {
-			delete(t.aircrafts, msg.HexIdent)
+			delete(t.byHex, msg.HexIdent)
 			return Aircraft{}, false
 		}
 	}
@@ -43,7 +43,7 @@ func (t *Tracker) UpdateState(msg *Message) (Aircraft, bool) {
 		timestamp = now
 	}
 
-	ac, exists := t.aircrafts[msg.HexIdent]
+	ac, exists := t.byHex[msg.HexIdent]
 	isNew := !exists
 
 	if isNew {
@@ -57,7 +57,7 @@ func (t *Tracker) UpdateState(msg *Message) (Aircraft, bool) {
 			ac.Manufacturer = mfg
 			ac.Model = model
 		}
-		t.aircrafts[msg.HexIdent] = ac
+		t.byHex[msg.HexIdent] = ac
 	}
 
 	// Apply updates incrementally
@@ -79,9 +79,11 @@ func (t *Tracker) UpdateState(msg *Message) (Aircraft, bool) {
 	}
 	if msg.Latitude != nil {
 		ac.Latitude = *msg.Latitude
+		ac.HasPosition = true
 	}
 	if msg.Longitude != nil {
 		ac.Longitude = *msg.Longitude
+		ac.HasPosition = true
 	}
 	if msg.VerticalRate != nil {
 		ac.VerticalRate = *msg.VerticalRate
@@ -103,7 +105,7 @@ func (t *Tracker) Get(hexIdent string) (Aircraft, bool) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	ac, exists := t.aircrafts[hexIdent]
+	ac, exists := t.byHex[hexIdent]
 	if !exists {
 		return Aircraft{}, false
 	}
@@ -115,8 +117,8 @@ func (t *Tracker) GetAllActive() []Aircraft {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	list := make([]Aircraft, 0, len(t.aircrafts))
-	for _, ac := range t.aircrafts {
+	list := make([]Aircraft, 0, len(t.byHex))
+	for _, ac := range t.byHex {
 		list = append(list, *ac)
 	}
 	return list
@@ -126,21 +128,21 @@ func (t *Tracker) GetAllActive() []Aircraft {
 func (t *Tracker) Remove(hexIdent string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	delete(t.aircrafts, hexIdent)
+	delete(t.byHex, hexIdent)
 }
 
-// CleanupOrphans evicts aircraft that haven't been heard from in longer than the specified maxAge.
+// EvictStale evicts aircraft that haven't been heard from in longer than the specified maxAge.
 // Returns the number of evicted aircraft.
-func (t *Tracker) CleanupOrphans(maxAge time.Duration) int {
+func (t *Tracker) EvictStale(maxAge time.Duration) int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	now := time.Now()
 	evicted := 0
 
-	for hex, ac := range t.aircrafts {
+	for hex, ac := range t.byHex {
 		if now.Sub(ac.LastSeen) > maxAge {
-			delete(t.aircrafts, hex)
+			delete(t.byHex, hex)
 			evicted++
 		}
 	}

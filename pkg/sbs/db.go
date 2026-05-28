@@ -7,12 +7,14 @@ import (
 	"io"
 	"log"
 	"strings"
+	"unicode"
 )
 
 //go:embed aircraft_db.csv.gz
 var aircraftDBDataGzipped []byte
 
-var aircraftDBData []byte
+// aircraftDB maps uppercase ICAO hex → [reg, typeCode, desc]
+var aircraftDB map[string][3]string
 
 func init() {
 	// Decompress the database at startup
@@ -29,75 +31,35 @@ func init() {
 	if err != nil {
 		log.Fatalf("failed to read decompressed aircraft database: %v", err)
 	}
-	aircraftDBData = data
+
+	aircraftDB = make(map[string][3]string)
+	for _, rawLine := range strings.Split(string(data), "\n") {
+		// Handle \r\n line endings
+		line := strings.TrimRight(rawLine, "\r")
+		if line == "" {
+			continue
+		}
+		fields := strings.Split(line, ";")
+		if len(fields) < 4 {
+			continue
+		}
+		key := strings.ToUpper(fields[0])
+		aircraftDB[key] = [3]string{fields[1], fields[2], fields[3]}
+	}
 }
 
 // Lookup searches the embedded aircraft database for a given ICAO Hex ID.
 // If found, it returns the registration, aircraft type code, full description, and a found flag.
 func Lookup(hex string) (reg string, typeCode string, desc string, found bool) {
 	hex = strings.ToUpper(strings.TrimSpace(hex))
-	if len(hex) == 0 || len(aircraftDBData) == 0 {
+	if len(hex) == 0 || aircraftDB == nil {
 		return "", "", "", false
 	}
-
-	low := 0
-	high := len(aircraftDBData)
-
-	for low < high {
-		mid := low + (high-low)/2
-
-		// Backtrack to the start of the current line
-		start := mid
-		for start > 0 && aircraftDBData[start-1] != '\n' {
-			start--
-		}
-
-		// Find the end of the current line
-		end := start
-		for end < len(aircraftDBData) && aircraftDBData[end] != '\n' {
-			end++
-		}
-
-		line := aircraftDBData[start:end]
-		if len(line) == 0 {
-			break
-		}
-
-		// Read the hex code at the start of the line (up to the first ';')
-		semiIdx := -1
-		for i, b := range line {
-			if b == ';' {
-				semiIdx = i
-				break
-			}
-		}
-
-		if semiIdx == -1 {
-			// Malformed line
-			break
-		}
-
-		currHex := string(line[:semiIdx])
-
-		if currHex == hex {
-			// Found it! Parse the fields.
-			// Format is: hex;registration;typecode;description
-			fields := strings.Split(string(line), ";")
-			if len(fields) >= 4 {
-				return fields[1], fields[2], fields[3], true
-			}
-			return "", "", "", false
-		}
-
-		// Since ICAO Hex addresses are alphabetically sorted in the database:
-		if currHex < hex {
-			low = end + 1
-		} else {
-			high = start
-		}
+	entry, ok := aircraftDB[hex]
+	if !ok {
+		return "", "", "", false
 	}
-
-	return "", "", "", false
+	return entry[0], entry[1], entry[2], true
 }
 
 // ParseManufacturerAndModel extracts a user-friendly manufacturer name and model
@@ -132,10 +94,7 @@ func toTitle(s string) string {
 	if s == "" {
 		return ""
 	}
-	r := []rune(strings.ToLower(s))
-	if len(r) > 0 {
-		// Safely capitalize the first character
-		r[0] = []rune(strings.ToUpper(string(r[0])))[0]
-	}
-	return string(r)
+	runes := []rune(strings.ToLower(s))
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
 }

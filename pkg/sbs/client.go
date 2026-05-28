@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const msgChanBuffer = 100
+
 // Client manages the TCP connection to the ADS-B BaseStation stream.
 type Client struct {
 	addr string
@@ -23,7 +25,7 @@ func NewClient(addr string) *Client {
 // Start opens the connection and streams parsed SBS messages to the returned channel.
 // It handles socket failures and auto-reconnects with exponential backoff.
 func (c *Client) Start(ctx context.Context) <-chan *Message {
-	out := make(chan *Message, 100)
+	out := make(chan *Message, msgChanBuffer)
 
 	go func() {
 		defer close(out)
