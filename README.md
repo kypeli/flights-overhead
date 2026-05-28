@@ -110,7 +110,7 @@ flights-overhead/
     ├── tracker.go       # Thread-safe aircraft state registry (with DB query)
     ├── client.go        # TCP connection manager with auto-reconnect
     ├── geo.go           # Haversine distance and heading utilities
-    ├── db.go            # Embedded database engine & binary search lookup
+    ├── db.go            # Embedded database engine & map-based ICAO hex lookup
     ├── db_test.go       # Unit tests for database lookup and parsing
     └── aircraft_db.csv.gz # Gzipped lookup database (embedded in the Go binary, ~4.0 MB)
 ```
