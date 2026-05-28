@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>AeroTrack | Active Flight Monitor</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;family=Geist:wght@400;600;700&amp;display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0b1326;
+            color: #dae2fd;
+            -webkit-font-smoothing: antialiased;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .instrument-border {
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #060e20;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2d3449;
+        }
+    </style>
+    <script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-secondary-container": "#a7b6cc",
+                      "on-error-container": "#ffdad6",
+                      "surface-container-high": "#222a3d",
+                      "on-surface": "#dae2fd",
+                      "tertiary-fixed-dim": "#b9c7df",
+                      "surface-dim": "#0b1326",
+                      "tertiary": "#ffffff",
+                      "on-tertiary-container": "#57657a",
+                      "on-background": "#dae2fd",
+                      "surface": "#0b1326",
+                      "on-secondary-fixed": "#0d1c2d",
+                      "primary": "#ffffff",
+                      "outline": "#8e9193",
+                      "on-primary": "#2d3133",
+                      "primary-fixed": "#e0e3e5",
+                      "on-tertiary-fixed-variant": "#3a485b",
+                      "tertiary-fixed": "#d5e3fc",
+                      "error-container": "#93000a",
+                      "secondary-fixed": "#d4e4fa",
+                      "on-primary-container": "#626567",
+                      "on-tertiary": "#233144",
+                      "inverse-on-surface": "#283044",
+                      "surface-bright": "#31394d",
+                      "surface-container": "#171f33",
+                      "tertiary-container": "#d5e3fc",
+                      "on-tertiary-fixed": "#0d1c2e",
+                      "surface-container-highest": "#2d3449",
+                      "on-secondary-fixed-variant": "#39485a",
+                      "primary-container": "#e0e3e5",
+                      "primary-fixed-dim": "#c4c7c9",
+                      "inverse-surface": "#dae2fd",
+                      "on-surface-variant": "#c4c7c9",
+                      "surface-variant": "#2d3449",
+                      "surface-tint": "#c4c7c9",
+                      "inverse-primary": "#5c5f61",
+                      "secondary-container": "#39485a",
+                      "surface-container-lowest": "#060e20",
+                      "background": "#0b1326",
+                      "secondary": "#b9c8de",
+                      "outline-variant": "#444749",
+                      "on-primary-fixed-variant": "#444749",
+                      "on-secondary": "#233143",
+                      "on-error": "#690005",
+                      "on-primary-fixed": "#191c1e",
+                      "secondary-fixed-dim": "#b9c8de",
+                      "error": "#ffb4ab",
+                      "surface-container-low": "#131b2e"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "xl": "48px",
+                      "margin-desktop": "32px",
+                      "base": "4px",
+                      "md": "16px",
+                      "margin-mobile": "16px",
+                      "xs": "4px",
+                      "sm": "8px",
+                      "lg": "24px",
+                      "gutter": "16px"
+              },
+              "fontFamily": {
+                      "headline-lg": ["Geist"],
+                      "label-sm": ["JetBrains Mono"],
+                      "body-md": ["Geist"],
+                      "headline-lg-mobile": ["Geist"],
+                      "display": ["Geist"],
+                      "code-md": ["JetBrains Mono"]
+              },
+              "fontSize": {
+                      "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "label-sm": ["12px", {"lineHeight": "1.4", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                      "body-md": ["16px", {"lineHeight": "1.6", "letterSpacing": "0", "fontWeight": "400"}],
+                      "headline-lg-mobile": ["24px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                      "display": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "code-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}]
+              }
+            },
+          },
+        }
+      </script>
+</head>
+<body class="flex flex-col min-h-screen">
+<!-- Top Navigation Bar -->
+<header class="bg-surface border-b border-outline-variant flex justify-between items-center w-full px-lg py-md top-0 z-50">
+<div class="flex items-center gap-md">
+<span class="font-headline-lg text-headline-lg font-bold text-on-surface">AeroTrack</span>
+<div class="h-6 w-[1px] bg-outline-variant"></div>
+<div class="flex items-center gap-sm">
+<span id="connection-indicator" class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span id="connection-status" class="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-wider">Live Radar Feed</span>
+</div>
+</div>
+<div class="flex items-center gap-lg">
+    <div class="font-label-sm text-[11px] text-on-surface-variant">
+        STATION: <span class="text-secondary font-bold font-mono" id="station-coords">--.--, --.--</span>
+    </div>
+</div>
+</header>
+<main class="flex-grow flex flex-col p-lg max-w-[1200px] mx-auto w-full gap-lg">
+<!-- Quick Stats / Cockpit Dashboard Row -->
+<section class="grid grid-cols-2 md:grid-cols-4 gap-md">
+<div class="bg-surface-container border border-outline-variant p-md instrument-border">
+<p class="font-label-sm text-label-sm uppercase text-on-surface-variant mb-xs">Active Targets</p>
+<p id="active-targets-count" class="font-headline-lg text-headline-lg text-primary">0</p>
+</div>
+<div class="bg-surface-container border border-outline-variant p-md instrument-border">
+<p class="font-label-sm text-label-sm uppercase text-on-surface-variant mb-xs">Local Time</p>
+<p class="font-headline-lg text-headline-lg text-primary font-mono" id="current-time">00:00:00</p>
+</div>
+</section>
+<!-- Flight Table Container -->
+<section class="bg-surface-container border border-outline-variant flex flex-col instrument-border">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse table-auto">
+<thead>
+<tr class="bg-surface-container-highest border-b border-outline-variant transition-transform border-t">
+<th class="px-md py-sm font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant whitespace-nowrap" style="width: 25%;">Callsign</th>
+<th class="px-md py-sm font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant whitespace-nowrap" style="width: 18.75%;">Altitude (ft)</th>
+<th class="px-md py-sm font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant whitespace-nowrap" style="width: 18.75%;">V-Rate (fpm)</th>
+<th class="px-md py-sm font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant whitespace-nowrap" style="width: 18.75%;">Distance (nm)</th>
+<th class="px-md py-sm font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant whitespace-nowrap" style="width: 18.75%;">Heading</th></tr>
+</thead>
+<tbody id="flight-table-body" class="font-code-md text-code-md text-on-surface divide-y divide-outline-variant">
+<!-- Default loading state -->
+<tr id="empty-row">
+    <td colspan="5" class="px-md py-xl text-center text-on-surface-variant font-body-md">
+        Connecting to live receiver stream...
+    </td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- Secondary Sub-Layout (Subtle Map Area & Squawk 7700 Watch) -->
+<section class="grid grid-cols-1 md:grid-cols-3 gap-lg">
+<div class="flex flex-col gap-md">
+<div id="emergency-card" class="bg-surface-container-high border border-outline-variant p-md instrument-border flex items-center justify-between transition-colors duration-300">
+<div>
+<p class="font-label-sm text-label-sm uppercase text-primary" id="emergency-title">Emergency Override</p>
+<p class="font-label-sm text-[10px] text-on-surface-variant" id="emergency-status">Global Squawk 7700 Watch</p>
+</div>
+<button id="emergency-indicator" class="w-10 h-10 border border-outline-variant flex items-center justify-center text-on-surface-variant hover:bg-outline-variant/10 transition-colors">
+<span class="material-symbols-outlined" data-icon="report">report</span>
+</button>
+</div>
+</div>
+<div class="flex flex-col gap-md">
+<div class="bg-surface-container border border-outline-variant p-md instrument-border flex items-center justify-between">
+<div>
+<p class="font-label-sm text-label-sm uppercase text-on-surface-variant font-bold">Base Station Receiver</p>
+<p class="font-label-sm text-[10px] text-secondary font-mono" id="feed-addr">localhost:30003</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-surface-container-lowest border-t border-outline-variant flex flex-col md:flex-row justify-between items-center w-full px-lg py-md gap-md mt-auto">
+<div class="flex gap-lg">
+    <span class="font-label-sm text-[10px] text-on-surface-variant">AeroTrack Radar System v1.0.0</span>
+</div>
+<div class="flex items-center gap-sm">
+    <span class="font-label-sm text-[10px] text-on-surface-variant">DATA SOURCE: BASESTATION (SBS-1) STREAM</span>
+</div>
+</footer>
+<script>
+        // Real-time clock update
+        function updateClock() {
+            const now = new Date();
+            const timeString = now.toTimeString().split(' ')[0];
+            document.getElementById('current-time').textContent = timeString;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Connect to Go Backend Server-Sent Events (SSE)
+        const eventSource = new EventSource('/events');
+        
+        eventSource.onopen = () => {
+            document.getElementById('connection-indicator').classList.remove('bg-error');
+            document.getElementById('connection-indicator').classList.add('bg-primary');
+            document.getElementById('connection-status').textContent = 'Live Radar Feed';
+        };
+
+        eventSource.onerror = () => {
+            document.getElementById('connection-indicator').classList.remove('bg-primary');
+            document.getElementById('connection-indicator').classList.add('bg-error');
+            document.getElementById('connection-status').textContent = 'Connection Interrupted';
+        };
+
+        eventSource.onmessage = (event) => {
+            const payload = JSON.parse(event.data);
+            updateUI(payload);
+        };
+
+        function formatAltitude(alt) {
+            if (!alt) return '---';
+            return alt.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+
+        function getAircraftType(hex) {
+            if (!hex) return 'Commercial Airliner';
+            const h = hex.toUpperCase();
+            if (h.startsWith('A')) return 'BOEING • Commercial Aircraft';
+            if (h.startsWith('3') || h.startsWith('4')) return 'AIRBUS • Commercial Jet';
+            if (h.startsWith('E') || h.startsWith('C')) return 'EMBRAER • Regional Jet';
+            return 'ICAO ' + h + ' • Active Transponder';
+        }
+
+        function updateUI(data) {
+            if (data.receiver_lat && data.receiver_lon) {
+                document.getElementById('station-coords').textContent = 
+                    `${data.receiver_lat.toFixed(4)}°N, ${data.receiver_lon.toFixed(4)}°E`;
+            }
+            if (data.receiver_addr) {
+                document.getElementById('feed-addr').textContent = data.receiver_addr;
+            }
+
+            const flights = data.flights || [];
+            document.getElementById('active-targets-count').textContent = flights.length;
+
+            const tbody = document.getElementById('flight-table-body');
+            
+            if (flights.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="px-md py-xl text-center text-on-surface-variant font-body-md">
+                            No active aircraft tracked overhead. Monitoring airspace...
+                        </td>
+                    </tr>`;
+                
+                document.getElementById('emergency-card').className = 'bg-surface-container-high border border-outline-variant p-md instrument-border flex items-center justify-between transition-colors duration-300';
+                document.getElementById('emergency-indicator').className = 'w-10 h-10 border border-outline-variant flex items-center justify-center text-on-surface-variant hover:bg-outline-variant/10 transition-colors';
+                document.getElementById('emergency-title').className = 'font-label-sm text-label-sm uppercase text-primary';
+                document.getElementById('emergency-status').textContent = 'Global Squawk 7700 Watch';
+                return;
+            }
+
+            let emergencyFlight = null;
+            for (const f of flights) {
+                if (f.squawk === '7700' || f.squawk === '7600' || f.squawk === '7500') {
+                    emergencyFlight = f;
+                    break;
+                }
+            }
+
+            if (emergencyFlight) {
+                document.getElementById('emergency-card').className = 'bg-error-container/20 border border-error p-md instrument-border flex items-center justify-between transition-colors duration-300 animate-pulse';
+                document.getElementById('emergency-indicator').className = 'w-10 h-10 border border-error flex items-center justify-center text-error bg-error/10 transition-colors';
+                document.getElementById('emergency-title').className = 'font-label-sm text-label-sm uppercase text-error font-bold';
+                document.getElementById('emergency-status').textContent = `EMERGENCY ALERT: ${emergencyFlight.callsign || emergencyFlight.hex_ident} (SQWK ${emergencyFlight.squawk})`;
+            } else {
+                document.getElementById('emergency-card').className = 'bg-surface-container-high border border-outline-variant p-md instrument-border flex items-center justify-between transition-colors duration-300';
+                document.getElementById('emergency-indicator').className = 'w-10 h-10 border border-outline-variant flex items-center justify-center text-on-surface-variant hover:bg-outline-variant/10 transition-colors';
+                document.getElementById('emergency-title').className = 'font-label-sm text-label-sm uppercase text-primary';
+                document.getElementById('emergency-status').textContent = 'Global Squawk 7700 Watch';
+            }
+
+            let rowsHtml = '';
+            flights.forEach(f => {
+                const callsign = f.callsign || f.hex_ident || '------';
+                const aircraftType = getAircraftType(f.hex_ident);
+                const alt = formatAltitude(f.altitude);
+                
+                let vrateHtml = '<div class="flex items-center gap-xs"><span>0</span></div>';
+                if (f.vertical_rate < 0) {
+                    vrateHtml = `<div class="flex items-center gap-xs text-error font-bold"><span>${f.vertical_rate}</span></div>`;
+                } else if (f.vertical_rate > 0) {
+                    vrateHtml = `<div class="flex items-center gap-xs text-secondary font-bold"><span>+${f.vertical_rate}</span></div>`;
+                }
+
+                const distanceStr = f.distance > 0 ? f.distance.toFixed(1) : '---';
+                const directionStr = f.direction || '---';
+
+                rowsHtml += `
+                    <tr class="hover:bg-surface-container-high transition-colors group cursor-pointer transition-transform duration-75 active:scale-[0.995]">
+                        <td class="px-md py-md whitespace-nowrap">
+                            <div class="flex flex-col">
+                                <span class="font-display text-headline-lg leading-none mb-xs text-primary group-hover:text-tertiary transition-colors duration-150">${callsign}</span>
+                                <span class="font-label-sm text-[10px] text-on-surface-variant">${aircraftType}</span>
+                            </div>
+                        </td>
+                        <td class="px-md py-md font-bold text-headline-lg-mobile text-on-surface whitespace-nowrap font-mono">${alt}</td>
+                        <td class="px-md py-md text-headline-lg-mobile whitespace-nowrap font-mono">${vrateHtml}</td>
+                        <td class="px-md py-md text-headline-lg-mobile whitespace-nowrap font-mono">${distanceStr}</td>
+                        <td class="px-md py-md text-headline-lg-mobile font-mono whitespace-nowrap text-on-surface-variant">${directionStr}</td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = rowsHtml;
+        }
+    </script>
+</body>
+</html>

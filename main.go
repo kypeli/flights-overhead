@@ -2,11 +2,16 @@ package main
 
 import (
 	"context"
+	_ "embed"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
+	"sort"
+	"sync"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -14,13 +19,121 @@ import (
 	"flights-overhead/pkg/sbs"
 )
 
+//go:embed dashboard.html
+var dashboardHTML []byte
+
+// FlightJSON defines the web-facing telemetry representation of tracked aircraft.
+type FlightJSON struct {
+	HexIdent     string  `json:"hex_ident"`
+	Callsign     string  `json:"callsign,omitempty"`
+	Altitude     int     `json:"altitude,omitempty"`
+	GroundSpeed  float64 `json:"ground_speed,omitempty"`
+	Track        float64 `json:"track,omitempty"`
+	Latitude     float64 `json:"latitude,omitempty"`
+	Longitude    float64 `json:"longitude,omitempty"`
+	VerticalRate int     `json:"vertical_rate,omitempty"`
+	Squawk       string  `json:"squawk,omitempty"`
+	IsOnGround   bool    `json:"is_on_ground"`
+	Distance     float64 `json:"distance"`
+	Direction    string  `json:"direction,omitempty"`
+}
+
+// StreamPayload represents the complete live radar broadcast payload.
+type StreamPayload struct {
+	ReceiverLat  float64      `json:"receiver_lat"`
+	ReceiverLon  float64      `json:"receiver_lon"`
+	ReceiverAddr string       `json:"receiver_addr"`
+	Flights      []FlightJSON `json:"flights"`
+}
+
+// Broker coordinates real-time thread-safe Server-Sent Events (SSE) streaming.
+type Broker struct {
+	mu      sync.Mutex
+	clients map[chan string]bool
+}
+
+func NewBroker() *Broker {
+	return &Broker{
+		clients: make(map[chan string]bool),
+	}
+}
+
+func (b *Broker) Register(ch chan string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.clients[ch] = true
+}
+
+func (b *Broker) Unregister(ch chan string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	delete(b.clients, ch)
+	close(ch)
+}
+
+func (b *Broker) Broadcast(msg string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for ch := range b.clients {
+		select {
+		case ch <- msg:
+		default:
+			// Client's channel is blocked; skip to avoid stalling the broadcaster
+		}
+	}
+}
+
+func (b *Broker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	ch := make(chan string, 10)
+	b.Register(ch)
+	defer b.Unregister(ch)
+
+	ctx := r.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg, ok := <-ch:
+			if !ok {
+				return
+			}
+			_, err := fmt.Fprintf(w, "data: %s\n\n", msg)
+			if err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
+}
+
 func main() {
 	// 1. Define CLI Parameters
-	addrFlag := flag.String("addr", "localhost:30003", "ADS-B receiver TCP address (host:port)")
+	addrFlag := flag.String("addr", "localhost:30003", "ADS-B receiver TCP address (host:port) (deprecated: use -tracker-addr)")
+	trackerAddrFlag := flag.String("tracker-addr", "", "ADS-B receiver TCP address (host:port) to read stream from")
 	expireFlag := flag.Duration("expire", 60*time.Second, "duration after which an inactive aircraft is expired")
 	reportFlag := flag.Duration("report", 5*time.Second, "reporting frequency interval")
 	debugFlag := flag.Bool("debug", false, "enable debug logging mode")
+	httpFlag := flag.String("http", "localhost:8080", "web dashboard HTTP address (host:port)")
+	latFlag := flag.Float64("lat", 60.1699, "receiver latitude coordinate")
+	lonFlag := flag.Float64("lon", 24.9384, "receiver longitude coordinate")
 	flag.Parse()
+
+	// Resolve the target tracker TCP source address
+	trackerAddr := *addrFlag
+	if *trackerAddrFlag != "" {
+		trackerAddr = *trackerAddrFlag
+	}
 
 	// 2. Initialize Structured Logger
 	logLevel := slog.LevelInfo
@@ -48,19 +161,36 @@ func main() {
 	}()
 
 	// 5. Initialize client and tracker
-	client := sbs.NewClient(*addrFlag)
+	client := sbs.NewClient(trackerAddr)
 	tracker := sbs.NewTracker()
 
 	// 6. Connect to ADS-B stream
 	msgChan := client.Start(ctx)
 
-	// 7. Background ticker to report active flights overhead
+	// 7. Background tickers
 	reportTicker := time.NewTicker(*reportFlag)
 	defer reportTicker.Stop()
 
-	// 8. Background ticker to clean up orphan (expired) aircraft sessions
 	cleanupTicker := time.NewTicker(10 * time.Second)
 	defer cleanupTicker.Stop()
+
+	broadcastTicker := time.NewTicker(1 * time.Second)
+	defer broadcastTicker.Stop()
+
+	// 8. Launch embedded HTTP web server with the SSE broker
+	broker := NewBroker()
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write(dashboardHTML)
+	})
+	http.Handle("/events", broker)
+
+	go func() {
+		slog.Info("starting web dashboard server...", "addr", *httpFlag)
+		if err := http.ListenAndServe(*httpFlag, nil); err != nil {
+			slog.Error("HTTP server failed to start", "error", err)
+		}
+	}()
 
 	slog.Info("listening for incoming messages...")
 
@@ -93,7 +223,63 @@ func main() {
 			if evictedCount > 0 {
 				slog.Info("cleaned up inactive aircraft sessions", "evicted_count", evictedCount)
 			}
+
+		case <-broadcastTicker.C:
+			// Broadcast latest flight telemetry to connected web clients
+			broadcastFlights(tracker, broker, *latFlag, *lonFlag, trackerAddr)
 		}
+	}
+}
+
+// broadcastFlights formats all tracked flights and pushes a JSON payload to the SSE broker.
+func broadcastFlights(tracker *sbs.Tracker, broker *Broker, receiverLat, receiverLon float64, receiverAddr string) {
+	active := tracker.GetAllActive()
+	flights := make([]FlightJSON, 0, len(active))
+
+	for _, ac := range active {
+		dist := sbs.DistanceNM(receiverLat, receiverLon, ac.Latitude, ac.Longitude)
+		var direction string
+		if ac.Track > 0 {
+			direction = sbs.TrackToDirection(ac.Track)
+		}
+
+		flights = append(flights, FlightJSON{
+			HexIdent:     ac.HexIdent,
+			Callsign:     ac.Callsign,
+			Altitude:     ac.Altitude,
+			GroundSpeed:  ac.GroundSpeed,
+			Track:        ac.Track,
+			Latitude:     ac.Latitude,
+			Longitude:    ac.Longitude,
+			VerticalRate: ac.VerticalRate,
+			Squawk:       ac.Squawk,
+			IsOnGround:   ac.IsOnGround,
+			Distance:     dist,
+			Direction:    direction,
+		})
+	}
+
+	// Sort closest flights first (placing flights without coordinates at the end)
+	sort.Slice(flights, func(i, j int) bool {
+		if flights[i].Distance == 0 {
+			return false
+		}
+		if flights[j].Distance == 0 {
+			return true
+		}
+		return flights[i].Distance < flights[j].Distance
+	})
+
+	payload := StreamPayload{
+		ReceiverLat:  receiverLat,
+		ReceiverLon:  receiverLon,
+		ReceiverAddr: receiverAddr,
+		Flights:      flights,
+	}
+
+	data, err := json.Marshal(payload)
+	if err == nil {
+		broker.Broadcast(string(data))
 	}
 }
 
