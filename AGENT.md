@@ -10,12 +10,13 @@ The `flights-overhead` project is a Go-based backend designed to connect to loca
 ---
 
 ## ⚙️ Technology Stack
-* **Language**: Go 1.21+
+* **Language**: Go 1.26.3
 * **Dependencies**: Zero external dependencies. Uses the standard library exclusively:
   * `log/slog` for structured logging.
   * `bufio.Scanner` for optimized line-by-line TCP socket reading.
   * `sync.RWMutex` for thread-safe concurrent registry maps.
   * `text/tabwriter` for clean console dashboards.
+  * `net/http` for the embedded web dashboard and SSE broker.
 
 ---
 
@@ -24,13 +25,17 @@ The `flights-overhead` project is a Go-based backend designed to connect to loca
 ```
 flights-overhead/
 ├── AGENT.md               # This onboarding document
+├── dashboard.html         # Embedded web dashboard (SSE-driven live radar UI)
 ├── go.mod                 # Go module definition
-├── main.go                # Application orchestrator & CLI entrypoint
+├── main.go                # Application orchestrator, CLI entrypoint, HTTP server & SSE broker
 └── pkg/
     └── sbs/
-        ├── message.go     # Raw BaseStation Message struct and enums
         ├── aircraft.go    # Aggregated state struct for tracked flights
-        ├── parser.go      # CSV field extractor and time parsed logic
+        ├── client.go      # TCP connection manager with exponential backoff reconnect
+        ├── geo.go         # Haversine distance (NM) and track-to-direction utilities
+        ├── geo_test.go    # Unit tests for geo calculations
+        ├── message.go     # Raw BaseStation Message struct and enums
+        ├── parser.go      # CSV field extractor and time parsing logic
         ├── parser_test.go # Resiliency unit tests for the parser
         ├── tracker.go     # Thread-safe flight state registrar and orphan cleaner
         └── tracker_test.go# Unit tests for tracker state consolidation
@@ -95,6 +100,16 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
 * Integrates an **exponential backoff auto-reconnect loop** (starting at 500ms, doubling up to a maximum of 30s) if the receiver goes offline or network drops out.
 * Context-aware cancellation enables immediate shutdown response.
 
+### 4. Geo Utilities (`pkg/sbs/geo.go`)
+* `DistanceNM(lat1, lon1, lat2, lon2)` — calculates great-circle distance in nautical miles using the Haversine formula. Returns `0` when either coordinate pair is `0,0` (unknown position).
+* `TrackToDirection(track)` — converts a heading in degrees to an 8-point cardinal/ordinal string (`N`, `NE`, `E`, …, `NW`). Handles negative and >360° inputs via normalization.
+
+### 5. Web Dashboard & SSE Broker (`main.go`)
+* `dashboard.html` is embedded at compile time via `//go:embed` and served at `/`.
+* The `Broker` type manages a set of connected HTTP clients and pushes JSON payloads over **Server-Sent Events** at `/events` once per second.
+* Each broadcast includes the receiver's coordinates, its TCP address, and a sorted-by-distance list of all active `FlightJSON` records.
+* Flights without known coordinates (lat/lon both `0`) sort to the bottom of the list.
+
 ---
 
 ## 🛠️ Operational Commands
@@ -106,13 +121,19 @@ go test -v ./...
 
 ### Start the Application (connecting to an ADS-B receiver)
 ```bash
-go run main.go -addr "localhost:30003" -expire 60s -report 5s
+go run main.go -tracker-addr "localhost:30003" -expire 60s -report 5s -lat 60.1699 -lon 24.9384
 ```
 
-* `-addr`: Configures host and port of the TCP stream source.
-* `-expire`: Timeout duration after which inactive flights are evicted.
-* `-report`: Frequency for printing the flight overhead terminal dashboard.
-* `-debug`: Enables verbose line parser logging.
+| Flag | Default | Description |
+|---|---|---|
+| `-tracker-addr` | — | ADS-B receiver TCP address `host:port` (preferred). |
+| `-addr` | `localhost:30003` | Deprecated alias for `-tracker-addr`. Ignored when `-tracker-addr` is set. |
+| `-expire` | `60s` | Duration after which a silent aircraft is evicted from state. |
+| `-report` | `5s` | Interval for printing the terminal flight dashboard. |
+| `-http` | `localhost:8080` | Address for the embedded web dashboard HTTP server. |
+| `-lat` | `60.1699` | Receiver latitude (used for distance calculations). |
+| `-lon` | `24.9384` | Receiver longitude (used for distance calculations). |
+| `-debug` | `false` | Enables verbose per-line parser logging. |
 
 ---
 
