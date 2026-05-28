@@ -19,4 +19,6 @@ type Aircraft struct {
 	LastSeen     time.Time `json:"last_seen"`
 	MessageCount int64     `json:"message_count"`
 	FirstSeen    time.Time `json:"first_seen"`
+	Manufacturer string
+	Model        string
 }

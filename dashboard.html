@@ -246,9 +246,18 @@
             return alt.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
         }
 
-        function getAircraftType(hex) {
-            if (!hex) return 'Unknown Aircraft';
-            return 'ICAO ' + hex.toUpperCase() + ' • Active Transponder';
+        function getAircraftType(f) {
+            if (!f || !f.hex_ident) return 'Unknown Aircraft';
+            if (f.manufacturer && f.model) {
+                return f.manufacturer + ' • ' + f.model;
+            }
+            if (f.model) {
+                return f.model;
+            }
+            if (f.manufacturer) {
+                return f.manufacturer;
+            }
+            return 'ICAO ' + f.hex_ident.toUpperCase() + ' • Active Transponder';
         }
 
         function updateUI(data) {
@@ -305,7 +314,7 @@
             let rowsHtml = '';
             flights.forEach(f => {
                 const callsign = escapeHTML(f.callsign || f.hex_ident || '------');
-                const aircraftType = escapeHTML(getAircraftType(f.hex_ident));
+                const aircraftType = escapeHTML(getAircraftType(f));
                 const alt = formatAltitude(f.altitude);
                 
                 let vrateHtml = '<div class="flex items-center gap-xs"><span>0</span></div>';

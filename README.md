@@ -84,6 +84,11 @@ SBS-1 messages are incremental — one message updates the callsign, another the
 
 The TCP client reconnects automatically with exponential backoff (500 ms → 30 s) if the receiver goes offline.
 
+### ✈️ Offline Aircraft Lookup Database
+To display accurate aircraft manufacturers and model types (e.g. `Boeing • 737-800`), `flights-overhead` incorporates an embedded, local database of over 500,000 aircraft:
+* **Binary Search Lookup**: On startup, the embedded database file `aircraft_db.csv.gz` (only **4.0 MB** compressed) is decompressed into a flat `[]byte` slice of ~17.5 MB once. Lookups are performed directly on this slice using an $O(\log N)$ binary search, providing microsecond responses with **zero runtime heap allocations** and extremely low memory overhead.
+* **Database Compiler Script**: The helper script `scripts/build_db.go` can be run at any time to download and compile the latest crowdsourced registry from `wiedehopf/tar1090-db`. It filters out records that do not contain model details and strips unused columns to optimize storage.
+
 ## 🧪 Running the tests
 
 ```bash
@@ -96,13 +101,18 @@ go test -v ./...
 flights-overhead/
 ├── main.go              # CLI entrypoint, HTTP server, SSE broker, event loop
 ├── dashboard.html       # Embedded web UI (compiled into the binary)
+├── scripts/
+│   └── build_db.go      # Resilient build-time builder/compiler for aircraft database
 └── pkg/sbs/
     ├── message.go       # SBS-1 message types and field definitions
-    ├── aircraft.go      # Aggregated aircraft state struct
+    ├── aircraft.go      # Aggregated aircraft state struct (with manufacturer/model)
     ├── parser.go        # CSV → Message parser
-    ├── tracker.go       # Thread-safe aircraft state registry
+    ├── tracker.go       # Thread-safe aircraft state registry (with DB query)
     ├── client.go        # TCP connection manager with auto-reconnect
-    └── geo.go           # Haversine distance and heading utilities
+    ├── geo.go           # Haversine distance and heading utilities
+    ├── db.go            # Embedded database engine & binary search lookup
+    ├── db_test.go       # Unit tests for database lookup and parsing
+    └── aircraft_db.csv.gz # Gzipped lookup database (embedded in the Go binary, ~4.0 MB)
 ```
 
 ## 📻 Setting up an ADS-B receiver

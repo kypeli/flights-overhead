@@ -28,16 +28,21 @@ flights-overhead/
 ├── dashboard.html         # Embedded web dashboard (SSE-driven live radar UI)
 ├── go.mod                 # Go module definition
 ├── main.go                # Application orchestrator, CLI entrypoint, HTTP server & SSE broker
+├── scripts/
+│   └── build_db.go        # Build-time tool to pull, filter and optimize static metadata
 └── pkg/
     └── sbs/
-        ├── aircraft.go    # Aggregated state struct for tracked flights
+        ├── aircraft.go    # Aggregated state struct for tracked flights (with manufacturer/model)
+        ├── aircraft_db.csv.gz # Gzipped lookup database (embedded in binary, ~4.0 MB)
         ├── client.go      # TCP connection manager with exponential backoff reconnect
+        ├── db.go          # Embedded database engine & binary search lookup
+        ├── db_test.go     # Unit tests for database lookup and parsing
         ├── geo.go         # Haversine distance (NM) and track-to-direction utilities
         ├── geo_test.go    # Unit tests for geo calculations
         ├── message.go     # Raw BaseStation Message struct and enums
         ├── parser.go      # CSV field extractor and time parsing logic
         ├── parser_test.go # Resiliency unit tests for the parser
-        ├── tracker.go     # Thread-safe flight state registrar and orphan cleaner
+        ├── tracker.go     # Thread-safe flight state registrar and orphan cleaner (queries DB)
         └── tracker_test.go# Unit tests for tracker state consolidation
 ```
 
@@ -104,7 +109,13 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
 * `DistanceNM(lat1, lon1, lat2, lon2)` — calculates great-circle distance in nautical miles using the Haversine formula. Returns `0` when either coordinate pair is `0,0` (unknown position).
 * `TrackToDirection(track)` — converts a heading in degrees to an 8-point cardinal/ordinal string (`N`, `NE`, `E`, …, `NW`). Handles negative and >360° inputs via normalization.
 
-### 5. Web Dashboard & SSE Broker (`main.go`)
+### 5. Embedded Aircraft Database (`pkg/sbs/db.go` & `scripts/build_db.go`)
+* **Embedding**: Leverages standard `//go:embed` to package the compressed database `aircraft_db.csv.gz` directly into the binary.
+* **Low Memory Footprint**: Decompresses exactly once at package startup (`init()`) into a flat `[]byte` slice of ~17.5 MB.
+* **Binary Search Strategy**: To avoid huge memory/GC overhead from creating maps for ~500k records, lookups are evaluated using an $O(\log N)$ binary search directly on the raw sorted byte slice.
+* **Builder Script**: `scripts/build_db.go` downloads, filters, and optimizes the static database branch of `wiedehopf/tar1090-db` at build time.
+
+### 6. Web Dashboard & SSE Broker (`main.go`)
 * `dashboard.html` is embedded at compile time via `//go:embed` and served at `/`.
 * The `Broker` type manages a set of connected HTTP clients and pushes JSON payloads over **Server-Sent Events** at `/events` once per second.
 * Each broadcast includes the receiver's coordinates, its TCP address, and a sorted-by-distance list of all active `FlightJSON` records.

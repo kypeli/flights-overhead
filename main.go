@@ -36,6 +36,8 @@ type FlightJSON struct {
 	IsOnGround   bool    `json:"is_on_ground"`
 	Distance     float64 `json:"distance"`
 	Direction    string  `json:"direction,omitempty"`
+	Manufacturer string  `json:"manufacturer,omitempty"`
+	Model        string  `json:"model,omitempty"`
 }
 
 // StreamPayload represents the complete live radar broadcast payload.
@@ -257,6 +259,8 @@ func broadcastFlights(tracker *sbs.Tracker, broker *Broker, receiverLat, receive
 			IsOnGround:   ac.IsOnGround,
 			Distance:     dist,
 			Direction:    direction,
+			Manufacturer: ac.Manufacturer,
+			Model:        ac.Model,
 		})
 	}
 
