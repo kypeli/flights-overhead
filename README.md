@@ -35,8 +35,7 @@ Then open `http://localhost:8080` in your browser.
 
 | Flag | Default | Description |
 |---|---|---|
-| `-tracker-addr` | — | ADS-B receiver TCP address `host:port` (preferred) |
-| `-addr` | `localhost:30003` | Deprecated alias for `-tracker-addr` |
+| `-tracker-addr` | `localhost:30003` | ADS-B receiver TCP address `host:port` |
 | `-lat` | `60.1699` | Receiver latitude — used for distance calculations |
 | `-lon` | `24.9384` | Receiver longitude — used for distance calculations |
 | `-http` | `localhost:8080` | Address for the web dashboard |

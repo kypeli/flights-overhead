@@ -38,8 +38,7 @@ type config struct {
 
 // parseConfig parses all CLI flags and returns a populated config.
 func parseConfig() config {
-	addrFlag := flag.String("addr", "localhost:30003", "ADS-B receiver TCP address (host:port) (deprecated: use -tracker-addr)")
-	trackerAddrFlag := flag.String("tracker-addr", "", "ADS-B receiver TCP address (host:port) to read stream from")
+	trackerAddrFlag := flag.String("tracker-addr", "localhost:30003", "ADS-B receiver TCP address (host:port) to read stream from")
 	expireFlag := flag.Duration("expire", 60*time.Second, "duration after which an inactive aircraft is expired")
 	reportFlag := flag.Duration("report", 5*time.Second, "reporting frequency interval")
 	debugFlag := flag.Bool("debug", false, "enable debug logging mode")
@@ -48,14 +47,8 @@ func parseConfig() config {
 	lonFlag := flag.Float64("lon", 24.9384, "receiver longitude coordinate")
 	flag.Parse()
 
-	// Resolve the target tracker TCP source address
-	trackerAddr := *addrFlag
-	if *trackerAddrFlag != "" {
-		trackerAddr = *trackerAddrFlag
-	}
-
 	return config{
-		trackerAddr: trackerAddr,
+		trackerAddr: *trackerAddrFlag,
 		httpAddr:    *httpFlag,
 		expire:      *expireFlag,
 		report:      *reportFlag,

@@ -136,8 +136,7 @@ go run main.go -tracker-addr "localhost:30003" -expire 60s -report 5s -lat 60.16
 
 | Flag | Default | Description |
 |---|---|---|
-| `-tracker-addr` | — | ADS-B receiver TCP address `host:port` (preferred). |
-| `-addr` | `localhost:30003` | Deprecated alias for `-tracker-addr`. Ignored when `-tracker-addr` is set. |
+| `-tracker-addr` | `localhost:30003` | ADS-B receiver TCP address `host:port`. |
 | `-expire` | `60s` | Duration after which a silent aircraft is evicted from state. |
 | `-report` | `5s` | Interval for printing the terminal flight dashboard. |
 | `-http` | `localhost:8080` | Address for the embedded web dashboard HTTP server. |
