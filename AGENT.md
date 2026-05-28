@@ -97,7 +97,7 @@ Converts the comma-separated strings into a structured type-safe Go struct.
 ### 2. State Aggregation (`pkg/sbs/tracker.go`)
 Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordinates, MSG,4 updates speed), the thread-safe `sbs.Tracker` accumulates these fields.
 * Uses standard `sync.RWMutex` to guarantee that reads (e.g., periodic reports or futures API calls) and writes (updates from TCP stream) do not lock or collide.
-* **Garbage-Collection**: Exposes a `CleanupOrphans(maxAge time.Duration)` routine that purges stale flights that haven't sent updates within a configured interval.
+* **Garbage-Collection**: Exposes an `EvictStale(maxAge time.Duration)` routine that purges stale flights that haven't sent updates within a configured interval.
 * **Explicit Dropping**: Instantly evicts aircraft from the state database when receiving an explicit `STA` status change message with code `RM` (Remove) or `AD` (Aircraft Delete).
 
 ### 3. Network Connection Manager (`pkg/sbs/client.go`)
@@ -111,8 +111,7 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
 
 ### 5. Embedded Aircraft Database (`pkg/sbs/db.go` & `scripts/build_db.go`)
 * **Embedding**: Leverages standard `//go:embed` to package the compressed database `aircraft_db.csv.gz` directly into the binary.
-* **Low Memory Footprint**: Decompresses exactly once at package startup (`init()`) into a flat `[]byte` slice of ~17.5 MB.
-* **Binary Search Strategy**: To avoid huge memory/GC overhead from creating maps for ~500k records, lookups are evaluated using an $O(\log N)$ binary search directly on the raw sorted byte slice.
+* **Map-Based Lookup**: Decompresses exactly once at package startup (`init()`) into a `map[string][3]string` keyed by uppercase ICAO hex address, giving O(1) lookups.
 * **Builder Script**: `scripts/build_db.go` downloads, filters, and optimizes the static database branch of `wiedehopf/tar1090-db` at build time.
 
 ### 6. Web Dashboard & SSE Broker (`main.go`)

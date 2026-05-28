@@ -86,7 +86,7 @@ The TCP client reconnects automatically with exponential backoff (500 ms → 30 
 
 ### ✈️ Offline Aircraft Lookup Database
 To display accurate aircraft manufacturers and model types (e.g. `Boeing • 737-800`), `flights-overhead` incorporates an embedded, local database of over 500,000 aircraft:
-* **Binary Search Lookup**: On startup, the embedded database file `aircraft_db.csv.gz` (only **4.0 MB** compressed) is decompressed into a flat `[]byte` slice of ~17.5 MB once. Lookups are performed directly on this slice using an $O(\log N)$ binary search, providing microsecond responses with **zero runtime heap allocations** and extremely low memory overhead.
+* **Map-Based Lookup**: On startup, `aircraft_db.csv.gz` (only **4.0 MB** compressed) is decompressed once and loaded into a `map[string][3]string` keyed by ICAO hex address, giving O(1) lookups with minimal latency.
 * **Database Compiler Script**: The helper script `scripts/build_db.go` can be run at any time to download and compile the latest crowdsourced registry from `wiedehopf/tar1090-db`. It filters out records that do not contain model details and strips unused columns to optimize storage.
 
 ## 🧪 Running the tests
