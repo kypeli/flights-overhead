@@ -6,7 +6,7 @@ import (
 
 // DistanceNM calculates the distance between two coordinates in Nautical Miles using the Haversine formula.
 func DistanceNM(lat1, lon1, lat2, lon2 float64) float64 {
-	if lat1 == 0 && lon1 == 0 || lat2 == 0 && lon2 == 0 {
+	if (lat1 == 0 && lon1 == 0) || (lat2 == 0 && lon2 == 0) {
 		return 0
 	}
 	

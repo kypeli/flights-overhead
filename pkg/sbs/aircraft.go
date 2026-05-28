@@ -10,6 +10,7 @@ type Aircraft struct {
 	Altitude     int       `json:"altitude,omitempty"`
 	GroundSpeed  float64   `json:"ground_speed,omitempty"`
 	Track        float64   `json:"track,omitempty"`
+	HasTrack     bool      `json:"-"`
 	Latitude     float64   `json:"latitude,omitempty"`
 	Longitude    float64   `json:"longitude,omitempty"`
 	VerticalRate int       `json:"vertical_rate,omitempty"`

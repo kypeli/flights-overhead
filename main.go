@@ -189,6 +189,7 @@ func main() {
 		slog.Info("starting web dashboard server...", "addr", *httpFlag)
 		if err := http.ListenAndServe(*httpFlag, nil); err != nil {
 			slog.Error("HTTP server failed to start", "error", err)
+			cancel()
 		}
 	}()
 
@@ -239,7 +240,7 @@ func broadcastFlights(tracker *sbs.Tracker, broker *Broker, receiverLat, receive
 	for _, ac := range active {
 		dist := sbs.DistanceNM(receiverLat, receiverLon, ac.Latitude, ac.Longitude)
 		var direction string
-		if ac.Track > 0 {
+		if ac.HasTrack {
 			direction = sbs.TrackToDirection(ac.Track)
 		}
 

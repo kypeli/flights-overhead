@@ -69,6 +69,7 @@ func (t *Tracker) UpdateState(msg *Message) (Aircraft, bool) {
 	}
 	if msg.Track != nil {
 		ac.Track = *msg.Track
+		ac.HasTrack = true
 	}
 	if msg.Latitude != nil {
 		ac.Latitude = *msg.Latitude

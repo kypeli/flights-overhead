@@ -235,24 +235,28 @@
             updateUI(payload);
         };
 
+        function escapeHTML(str) {
+            const el = document.createElement('div');
+            el.textContent = String(str);
+            return el.innerHTML;
+        }
+
         function formatAltitude(alt) {
-            if (!alt) return '---';
+            if (alt === undefined || alt === null) return '---';
             return alt.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
         }
 
         function getAircraftType(hex) {
-            if (!hex) return 'Commercial Airliner';
-            const h = hex.toUpperCase();
-            if (h.startsWith('A')) return 'BOEING • Commercial Aircraft';
-            if (h.startsWith('3') || h.startsWith('4')) return 'AIRBUS • Commercial Jet';
-            if (h.startsWith('E') || h.startsWith('C')) return 'EMBRAER • Regional Jet';
-            return 'ICAO ' + h + ' • Active Transponder';
+            if (!hex) return 'Unknown Aircraft';
+            return 'ICAO ' + hex.toUpperCase() + ' • Active Transponder';
         }
 
         function updateUI(data) {
-            if (data.receiver_lat && data.receiver_lon) {
-                document.getElementById('station-coords').textContent = 
-                    `${data.receiver_lat.toFixed(4)}°N, ${data.receiver_lon.toFixed(4)}°E`;
+            if (data.receiver_lat !== undefined && data.receiver_lon !== undefined) {
+                const latDir = data.receiver_lat >= 0 ? 'N' : 'S';
+                const lonDir = data.receiver_lon >= 0 ? 'E' : 'W';
+                document.getElementById('station-coords').textContent =
+                    `${Math.abs(data.receiver_lat).toFixed(4)}°${latDir}, ${Math.abs(data.receiver_lon).toFixed(4)}°${lonDir}`;
             }
             if (data.receiver_addr) {
                 document.getElementById('feed-addr').textContent = data.receiver_addr;
@@ -300,8 +304,8 @@
 
             let rowsHtml = '';
             flights.forEach(f => {
-                const callsign = f.callsign || f.hex_ident || '------';
-                const aircraftType = getAircraftType(f.hex_ident);
+                const callsign = escapeHTML(f.callsign || f.hex_ident || '------');
+                const aircraftType = escapeHTML(getAircraftType(f.hex_ident));
                 const alt = formatAltitude(f.altitude);
                 
                 let vrateHtml = '<div class="flex items-center gap-xs"><span>0</span></div>';

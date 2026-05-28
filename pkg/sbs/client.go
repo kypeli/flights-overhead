@@ -75,13 +75,19 @@ func (c *Client) Start(ctx context.Context) <-chan *Message {
 
 // handleConnection scans the connection line-by-line, parses messages, and pushes them to out.
 func (c *Client) handleConnection(ctx context.Context, conn net.Conn, out chan<- *Message) {
-	// Ensure connection gets closed on function exit
 	defer conn.Close()
 
-	// Handle close signal in background if context closes while blocked on read
+	// Close the connection if the context is cancelled while blocked on a read.
+	// The done channel ensures the goroutine exits cleanly on normal return too,
+	// preventing a leak across reconnects.
+	done := make(chan struct{})
+	defer close(done)
 	go func() {
-		<-ctx.Done()
-		conn.Close()
+		select {
+		case <-ctx.Done():
+			conn.Close()
+		case <-done:
+		}
 	}()
 
 	scanner := bufio.NewScanner(conn)
