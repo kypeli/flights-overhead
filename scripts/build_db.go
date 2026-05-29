@@ -62,18 +62,23 @@ func main() {
 			continue
 		}
 
+		// Source format: hex;reg;typeCode;flag;desc;year;operator[;...]
 		hex := strings.TrimSpace(record[0])
 		reg := strings.TrimSpace(record[1])
 		typeCode := strings.TrimSpace(record[2])
 		desc := strings.TrimSpace(record[4])
+		operator := ""
+		if len(record) > 6 {
+			operator = strings.TrimSpace(record[6])
+		}
 
 		// Filter out records where both TypeCode and Description are empty.
 		if typeCode == "" && desc == "" {
 			continue
 		}
 
-		// Write optimized record: hex;registration;typecode;description
-		_, err = gzWriter.Write([]byte(hex + ";" + reg + ";" + typeCode + ";" + desc + "\n"))
+		// Write optimized record: hex;registration;typecode;operator;description
+		_, err = gzWriter.Write([]byte(hex + ";" + reg + ";" + typeCode + ";" + operator + ";" + desc + "\n"))
 		if err != nil {
 			log.Fatalf("error writing output: %v", err)
 		}

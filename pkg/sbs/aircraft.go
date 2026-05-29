@@ -22,4 +22,5 @@ type Aircraft struct {
 	FirstSeen    time.Time `json:"first_seen"`
 	Manufacturer string    `json:"manufacturer,omitempty"`
 	Model        string    `json:"model,omitempty"`
+	Operator     string    `json:"operator,omitempty"`
 }

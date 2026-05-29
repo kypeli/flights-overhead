@@ -52,10 +52,11 @@ func (t *Tracker) UpdateState(msg *Message) (Aircraft, bool) {
 			FirstSeen: timestamp,
 		}
 		// Query the embedded lookup database for aircraft metadata
-		if _, typeCode, desc, found := Lookup(msg.HexIdent); found {
+		if _, typeCode, operator, desc, found := Lookup(msg.HexIdent); found {
 			mfg, model := ParseManufacturerAndModel(desc, typeCode)
 			ac.Manufacturer = mfg
 			ac.Model = model
+			ac.Operator = operator
 		}
 		t.byHex[msg.HexIdent] = ac
 	}

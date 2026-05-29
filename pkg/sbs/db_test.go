@@ -7,7 +7,7 @@ import (
 func TestLookup(t *testing.T) {
 	// Test lookup of a known hex address (004002, which is Boeing 737-200)
 	hex := "004002"
-	reg, typeCode, desc, found := Lookup(hex)
+	reg, typeCode, _, desc, found := Lookup(hex)
 	if !found {
 		t.Fatalf("Expected to find hex %s, but got found = false", hex)
 	}
@@ -25,14 +25,14 @@ func TestLookup(t *testing.T) {
 	}
 
 	// Test case-insensitivity and spacing trim
-	_, _, _, foundUpper := Lookup(" 004002 ")
-	_, _, _, foundLower := Lookup(" 004002 ")
+	_, _, _, _, foundUpper := Lookup(" 004002 ")
+	_, _, _, _, foundLower := Lookup(" 004002 ")
 	if !foundUpper || !foundLower {
 		t.Errorf("Expected case-insensitive and trimmed Lookup to succeed")
 	}
 
 	// Test non-existent hex
-	_, _, _, foundMissing := Lookup("FFFFFF")
+	_, _, _, _, foundMissing := Lookup("FFFFFF")
 	if foundMissing {
 		t.Errorf("Expected Lookup of FFFFFF to fail (found = false)")
 	}

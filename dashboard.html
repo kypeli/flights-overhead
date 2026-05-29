@@ -260,6 +260,10 @@
             return 'ICAO ' + f.hex_ident.toUpperCase() + ' • Active Transponder';
         }
 
+        function getOperator(f) {
+            return (f && f.operator) ? f.operator : '';
+        }
+
         function updateUI(data) {
             if (data.receiver_lat !== undefined && data.receiver_lon !== undefined) {
                 const latDir = data.receiver_lat >= 0 ? 'N' : 'S';
@@ -315,6 +319,7 @@
             flights.forEach(f => {
                 const callsign = escapeHTML(f.callsign || f.hex_ident || '------');
                 const aircraftType = escapeHTML(getAircraftType(f));
+                const operator = escapeHTML(getOperator(f));
                 const alt = formatAltitude(f.altitude);
                 
                 let vrateHtml = '<div class="flex items-center gap-xs"><span>0</span></div>';
@@ -333,6 +338,7 @@
                             <div class="flex flex-col">
                                 <span class="font-display text-headline-lg leading-none mb-xs text-primary group-hover:text-tertiary transition-colors duration-150">${callsign}</span>
                                 <span class="font-label-sm text-[10px] text-on-surface-variant">${aircraftType}</span>
+                                ${operator ? `<span class="font-label-sm text-[10px] text-secondary mt-xs">${operator}</span>` : ''}
                             </div>
                         </td>
                         <td class="px-md py-md font-bold text-headline-lg-mobile text-on-surface whitespace-nowrap font-mono">${alt}</td>

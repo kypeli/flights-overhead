@@ -13,8 +13,8 @@ import (
 //go:embed aircraft_db.csv.gz
 var aircraftDBDataGzipped []byte
 
-// aircraftDB maps uppercase ICAO hex → [reg, typeCode, desc]
-var aircraftDB map[string][3]string
+// aircraftDB maps uppercase ICAO hex → [reg, typeCode, operator, desc]
+var aircraftDB map[string][4]string
 
 func init() {
 	// Decompress the database at startup
@@ -32,7 +32,7 @@ func init() {
 		log.Fatalf("failed to read decompressed aircraft database: %v", err)
 	}
 
-	aircraftDB = make(map[string][3]string)
+	aircraftDB = make(map[string][4]string)
 	for _, rawLine := range strings.Split(string(data), "\n") {
 		// Handle \r\n line endings
 		line := strings.TrimRight(rawLine, "\r")
@@ -40,26 +40,26 @@ func init() {
 			continue
 		}
 		fields := strings.Split(line, ";")
-		if len(fields) < 4 {
+		if len(fields) < 5 {
 			continue
 		}
 		key := strings.ToUpper(fields[0])
-		aircraftDB[key] = [3]string{fields[1], fields[2], fields[3]}
+		aircraftDB[key] = [4]string{fields[1], fields[2], fields[3], fields[4]}
 	}
 }
 
 // Lookup searches the embedded aircraft database for a given ICAO Hex ID.
-// If found, it returns the registration, aircraft type code, full description, and a found flag.
-func Lookup(hex string) (reg string, typeCode string, desc string, found bool) {
+// If found, it returns the registration, aircraft type code, operator, full description, and a found flag.
+func Lookup(hex string) (reg string, typeCode string, operator string, desc string, found bool) {
 	hex = strings.ToUpper(strings.TrimSpace(hex))
 	if len(hex) == 0 || aircraftDB == nil {
-		return "", "", "", false
+		return "", "", "", "", false
 	}
 	entry, ok := aircraftDB[hex]
 	if !ok {
-		return "", "", "", false
+		return "", "", "", "", false
 	}
-	return entry[0], entry[1], entry[2], true
+	return entry[0], entry[1], entry[2], entry[3], true
 }
 
 // ParseManufacturerAndModel extracts a user-friendly manufacturer name and model
