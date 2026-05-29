@@ -275,15 +275,25 @@ func broadcastFlights(tracker *sbs.Tracker, broker *Broker, receiverLat, receive
 		})
 	}
 
-	// Sort closest flights first (placing flights without coordinates at the end)
+	// Sort by distance ascending; fall back to callsign for flights without position.
 	sort.Slice(flights, func(i, j int) bool {
-		if flights[i].Distance == 0 {
-			return false
+		iPos := flights[i].HasPosition
+		jPos := flights[j].HasPosition
+		if iPos && jPos {
+			return flights[i].Distance < flights[j].Distance
 		}
-		if flights[j].Distance == 0 {
-			return true
+		if iPos != jPos {
+			return iPos
 		}
-		return flights[i].Distance < flights[j].Distance
+		ci := flights[i].Callsign
+		if ci == "" {
+			ci = flights[i].HexIdent
+		}
+		cj := flights[j].Callsign
+		if cj == "" {
+			cj = flights[j].HexIdent
+		}
+		return ci < cj
 	})
 
 	payload := StreamPayload{
