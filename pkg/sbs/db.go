@@ -1,3 +1,6 @@
+// db.go embeds and parses a gzip-compressed aircraft database CSV (sourced from
+// tar1090-db) and exposes a Lookup function that maps a 24-bit ICAO hex address to
+// registration, type code, operator, description, and raw CSV fields.
 package sbs
 
 import (
@@ -13,8 +16,8 @@ import (
 //go:embed aircraft_db.csv.gz
 var aircraftDBDataGzipped []byte
 
-// aircraftDB maps uppercase ICAO hex → [reg, typeCode, operator, desc]
-var aircraftDB map[string][4]string
+// aircraftDB maps uppercase ICAO hex → raw CSV value (everything after the hex field)
+var aircraftDB map[string]string
 
 func init() {
 	// Decompress the database at startup
@@ -32,34 +35,48 @@ func init() {
 		log.Fatalf("failed to read decompressed aircraft database: %v", err)
 	}
 
-	aircraftDB = make(map[string][4]string)
+	aircraftDB = make(map[string]string)
 	for _, rawLine := range strings.Split(string(data), "\n") {
 		// Handle \r\n line endings
 		line := strings.TrimRight(rawLine, "\r")
 		if line == "" {
 			continue
 		}
-		fields := strings.Split(line, ";")
-		if len(fields) < 5 {
+		sep := strings.IndexByte(line, ';')
+		if sep == -1 {
 			continue
 		}
-		key := strings.ToUpper(fields[0])
-		aircraftDB[key] = [4]string{fields[1], fields[2], fields[3], fields[4]}
+		key := strings.ToUpper(line[:sep])
+		aircraftDB[key] = line[sep+1:]
 	}
 }
 
 // Lookup searches the embedded aircraft database for a given ICAO Hex ID.
-// If found, it returns the registration, aircraft type code, operator, full description, and a found flag.
-func Lookup(hex string) (reg string, typeCode string, operator string, desc string, found bool) {
+// If found, it returns the registration, aircraft type code, operator, full description,
+// the raw DB entry string, and a found flag.
+func Lookup(hex string) (reg string, typeCode string, operator string, desc string, raw string, found bool) {
 	hex = strings.ToUpper(strings.TrimSpace(hex))
 	if len(hex) == 0 || aircraftDB == nil {
-		return "", "", "", "", false
+		return "", "", "", "", "", false
 	}
-	entry, ok := aircraftDB[hex]
-	if !ok {
-		return "", "", "", "", false
+	raw, found = aircraftDB[hex]
+	if !found {
+		return "", "", "", "", "", false
 	}
-	return entry[0], entry[1], entry[2], entry[3], true
+	fields := strings.SplitN(raw, ";", 4)
+	if len(fields) > 0 {
+		reg = fields[0]
+	}
+	if len(fields) > 1 {
+		typeCode = fields[1]
+	}
+	if len(fields) > 2 {
+		operator = fields[2]
+	}
+	if len(fields) > 3 {
+		desc = fields[3]
+	}
+	return reg, typeCode, operator, desc, raw, true
 }
 
 // ParseManufacturerAndModel extracts a user-friendly manufacturer name and model

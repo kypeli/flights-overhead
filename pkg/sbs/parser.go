@@ -1,3 +1,7 @@
+// parser.go implements ParseMessage, which splits a raw SBS-1 CSV line into its
+// constituent fields and populates a Message struct. Only MSG transmission messages
+// carry position and telemetry data; other message types are parsed for their
+// identifying fields only.
 package sbs
 
 import (

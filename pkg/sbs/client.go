@@ -1,3 +1,6 @@
+// client.go implements a TCP client that connects to an ADS-B receiver's BaseStation
+// (SBS-1) stream, reads raw message lines, and emits them on a channel for further
+// processing. It handles reconnection on network errors.
 package sbs
 
 import (

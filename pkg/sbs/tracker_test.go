@@ -1,3 +1,4 @@
+// tracker_test.go contains tests for the aircraft state tracker in tracker.go.
 package sbs
 
 import (

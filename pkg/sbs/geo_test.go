@@ -1,3 +1,4 @@
+// geo_test.go contains tests for the geographic helper functions in geo.go.
 package sbs
 
 import (

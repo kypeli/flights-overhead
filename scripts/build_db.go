@@ -1,3 +1,6 @@
+// Package main is a one-shot build script that downloads the tar1090-db aircraft
+// database as a gzip-compressed CSV from GitHub and writes it to
+// pkg/sbs/aircraft_db.csv.gz for embedding into the main binary.
 package main
 
 import (
@@ -10,7 +13,7 @@ import (
 	"strings"
 )
 
-const dbURL = "https://github.com/wiedehopf/tar1090-db/raw/csv/aircraft.csv.gz"
+const dbURL = "https://github.com/wiedehopf/tar1090-db/raw/refs/heads/csv/aircraft.csv.gz"
 
 func main() {
 	log.Println("Downloading aircraft database from tar1090-db...")
@@ -32,7 +35,7 @@ func main() {
 
 	// Prepare the output file path: pkg/sbs/aircraft_db.csv.gz
 	outPath := filepath.Join("pkg", "sbs", "aircraft_db.csv.gz")
-	
+
 	// Create parent directories if they don't exist
 	if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
 		log.Fatalf("failed to create output directories: %v", err)
@@ -78,7 +81,8 @@ func main() {
 		}
 
 		// Write optimized record: hex;registration;typecode;operator;description
-		_, err = gzWriter.Write([]byte(hex + ";" + reg + ";" + typeCode + ";" + operator + ";" + desc + "\n"))
+		dbEntry := hex + ";" + reg + ";" + typeCode + ";" + operator + ";" + desc + "\n"
+		_, err = gzWriter.Write([]byte(dbEntry))
 		if err != nil {
 			log.Fatalf("error writing output: %v", err)
 		}

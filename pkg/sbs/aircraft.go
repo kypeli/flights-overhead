@@ -1,3 +1,5 @@
+// aircraft.go defines the Aircraft struct that holds the aggregated state of a single
+// aircraft as built up from one or more incremental SBS-1 messages.
 package sbs
 
 import (

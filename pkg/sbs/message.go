@@ -1,3 +1,6 @@
+// message.go defines the SBS-1 message types and the Message struct that represents
+// a single parsed line from the BaseStation stream. Fields mirror the SBS-1 protocol
+// columns and use pointers to distinguish a missing value from a zero value.
 package sbs
 
 import (

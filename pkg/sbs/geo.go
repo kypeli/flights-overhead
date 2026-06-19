@@ -1,3 +1,6 @@
+// geo.go provides geographic helper functions used when processing aircraft positions,
+// including Haversine distance calculation in nautical miles and compass bearing
+// conversion from a numeric track angle to a cardinal direction string.
 package sbs
 
 import (

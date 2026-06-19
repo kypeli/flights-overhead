@@ -1,3 +1,6 @@
+// Package main is the entry point for the flights-overhead server. It connects to an
+// ADS-B BaseStation TCP stream, tracks aircraft state, and serves a web frontend
+// that displays nearby flights in real time via a JSON HTTP API.
 package main
 
 import (

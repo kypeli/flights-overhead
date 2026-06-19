@@ -1,3 +1,4 @@
+// parser_test.go contains tests for the SBS-1 message parser in parser.go.
 package sbs
 
 import (

@@ -1,6 +1,10 @@
+// tracker.go implements the Tracker, which maintains a thread-safe registry of
+// active aircraft indexed by ICAO hex address. It merges incremental SBS-1 messages
+// into per-aircraft state and evicts entries that have not been updated recently.
 package sbs
 
 import (
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -52,7 +56,8 @@ func (t *Tracker) UpdateState(msg *Message) (Aircraft, bool) {
 			FirstSeen: timestamp,
 		}
 		// Query the embedded lookup database for aircraft metadata
-		if _, typeCode, operator, desc, found := Lookup(msg.HexIdent); found {
+		if reg, typeCode, operator, desc, raw, found := Lookup(msg.HexIdent); found {
+			slog.Debug("aircraft db lookup", "hex", msg.HexIdent, "raw", raw, "reg", reg, "type_code", typeCode, "operator", operator, "desc", desc)
 			mfg, model := ParseManufacturerAndModel(desc, typeCode)
 			ac.Manufacturer = mfg
 			ac.Model = model
