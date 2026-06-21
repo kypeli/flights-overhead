@@ -188,10 +188,10 @@ func parseDateTime(dateStr, timeStr string) (time.Time, error) {
 	// Try layouts depending on presence of fractional seconds
 	var layout string
 	if strings.Contains(timeStr, ".") {
-		layout = "2006-01-02 15:04:05.999999999"
+		layout = "2006-01-02 15:04:05.999"
 	} else {
 		layout = "2006-01-02 15:04:05"
 	}
 
-	return time.Parse(layout, combined)
+	return time.ParseInLocation(layout, combined, time.Local)
 }
