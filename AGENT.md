@@ -11,12 +11,13 @@ The `flights-overhead` project is a Go-based backend designed to connect to loca
 
 ## ⚙️ Technology Stack
 * **Language**: Go 1.26.3
-* **Dependencies**: Zero external dependencies. Uses the standard library exclusively:
+* **Dependencies**: Zero Go module dependencies. Uses the standard library exclusively:
   * `log/slog` for structured logging.
   * `bufio.Scanner` for optimized line-by-line TCP socket reading.
   * `sync.RWMutex` for thread-safe concurrent registry maps.
   * `text/tabwriter` for clean console dashboards.
-  * `net/http` for the embedded web dashboard and SSE broker.
+  * `net/http` for the embedded web dashboard, SSE broker, and outbound API calls to adsbdb.com.
+* **External HTTP API**: [adsbdb.com](https://api.adsbdb.com/v0) — queried at runtime for aircraft metadata (manufacturer, registration, owner) and flight route (origin/destination airports) via `/aircraft/{hex}` and `/callsign/{callsign}` endpoints. Calls are rate-limited (max 2 req/s) and in-memory cached.
 
 ---
 
@@ -28,21 +29,18 @@ flights-overhead/
 ├── dashboard.html         # Embedded web dashboard (SSE-driven live radar UI)
 ├── go.mod                 # Go module definition
 ├── main.go                # Application orchestrator, CLI entrypoint, HTTP server & SSE broker
-├── scripts/
-│   └── build_db.go        # Build-time tool to pull, filter and optimize static metadata
 └── pkg/
     └── sbs/
-        ├── aircraft.go    # Aggregated state struct for tracked flights (with manufacturer/model)
-        ├── aircraft_db.csv.gz # Gzipped lookup database (embedded in binary, ~4.0 MB)
+        ├── adsbdb.go      # adsbdb.com API types and JSON response parsers
+        ├── adsbdb_test.go # Unit tests for adsbdb.com response parsing
+        ├── aircraft.go    # Aggregated state struct for tracked flights (with route/owner fields)
         ├── client.go      # TCP connection manager with exponential backoff reconnect
-        ├── db.go          # Embedded database engine & binary search lookup
-        ├── db_test.go     # Unit tests for database lookup and parsing
         ├── geo.go         # Haversine distance (NM) and track-to-direction utilities
         ├── geo_test.go    # Unit tests for geo calculations
         ├── message.go     # Raw BaseStation Message struct and enums
         ├── parser.go      # CSV field extractor and time parsing logic
         ├── parser_test.go # Resiliency unit tests for the parser
-        ├── tracker.go     # Thread-safe flight state registrar and orphan cleaner (queries DB)
+        ├── tracker.go     # Thread-safe flight state registrar, orphan cleaner, adsbdb.com API worker
         └── tracker_test.go# Unit tests for tracker state consolidation
 ```
 
@@ -96,9 +94,10 @@ Converts the comma-separated strings into a structured type-safe Go struct.
 
 ### 2. State Aggregation (`pkg/sbs/tracker.go`)
 Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordinates, MSG,4 updates speed), the thread-safe `sbs.Tracker` accumulates these fields.
-* Uses standard `sync.RWMutex` to guarantee that reads (e.g., periodic reports or futures API calls) and writes (updates from TCP stream) do not lock or collide.
+* Uses two separate mutexes: `mu` (`sync.RWMutex`) for the live aircraft registry and `cacheMu` for the adsbdb.com API caches. Never acquire `mu` while holding `cacheMu`, and vice versa — `triggerRouteLookup` is called from `UpdateState` (which holds `mu.Lock()`) and must not re-acquire `mu`.
 * **Garbage-Collection**: Exposes an `EvictStale(maxAge time.Duration)` routine that purges stale flights that haven't sent updates within a configured interval.
 * **Explicit Dropping**: Instantly evicts aircraft from the state database when receiving an explicit `STA` status change message with code `RM` (Remove) or `AD` (Aircraft Delete).
+* **API Enrichment**: On first sight of a new hex ID, queues an aircraft metadata lookup; on first sight of a callsign, queues a route lookup. Both paths check the cache first (cache-hit is synchronous, cache-miss queues an async fetch).
 
 ### 3. Network Connection Manager (`pkg/sbs/client.go`)
 * Opens a TCP stream socket connection and scans lines continuously.
@@ -109,10 +108,12 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
 * `DistanceNM(lat1, lon1, lat2, lon2)` — calculates great-circle distance in nautical miles using the Haversine formula. Returns `0` when either coordinate pair is `0,0` (unknown position).
 * `TrackToDirection(track)` — converts a heading in degrees to an 8-point cardinal/ordinal string (`N`, `NE`, `E`, …, `NW`). Handles negative and >360° inputs via normalization.
 
-### 5. Embedded Aircraft Database (`pkg/sbs/db.go` & `scripts/build_db.go`)
-* **Embedding**: Leverages standard `//go:embed` to package the compressed database `aircraft_db.csv.gz` directly into the binary.
-* **Map-Based Lookup**: Decompresses exactly once at package startup (`init()`) into a `map[string][3]string` keyed by uppercase ICAO hex address, giving O(1) lookups.
-* **Builder Script**: `scripts/build_db.go` downloads, filters, and optimizes the static database branch of `wiedehopf/tar1090-db` at build time.
+### 5. adsbdb.com API Integration (`pkg/sbs/adsbdb.go` & `pkg/sbs/tracker.go`)
+* **Aircraft Metadata**: When a new aircraft hex ID is first seen, a lookup to `https://api.adsbdb.com/v0/aircraft/{hex}` is queued. On success, the `Aircraft` struct is enriched with `Manufacturer`, `Model` (ICAO type description), `ICAOType`, `Registration`, and `RegisteredOwner`/`Operator`.
+* **Flight Route**: When a callsign is first observed for an aircraft, a lookup to `https://api.adsbdb.com/v0/callsign/{callsign}` is queued. On success, origin and destination airport fields (`OriginICAO`, `OriginIATA`, `OriginName`, `OriginCity`, `DestICAO`, `DestIATA`, `DestName`, `DestCity`) are populated.
+* **Background Worker**: `Tracker.StartAPIWorker(ctx)` runs a single goroutine that drains an internal buffered channel (`apiQueue`, capacity 200) at a rate-limited 500ms tick (≤2 req/s) to avoid hitting API rate limits.
+* **In-Memory Caching**: Results (including "not found") are cached in `aircraftCache` and `routeCache` (`map[string]*cached*`) under a dedicated `cacheMu` mutex, so no hex or callsign is ever fetched twice.
+* **Response Parsing**: `ParseAircraftResponse` and `ParseRouteResponse` in `adsbdb.go` handle the API's unusual envelope where `response` may be either a JSON object or a plain string like `"unknown aircraft"`.
 
 ### 6. Web Dashboard & SSE Broker (`main.go`)
 * `dashboard.html` is embedded at compile time via `//go:embed` and served at `/`.
@@ -131,7 +132,7 @@ go test -v ./...
 
 ### Start the Application (connecting to an ADS-B receiver)
 ```bash
-go run main.go -tracker-addr "localhost:30003" -expire 60s -report 5s -lat 60.1699 -lon 24.9384
+go run main.go -tracker-addr "localhost:30003" -expire 60s -report 5s -lat <lat> -lon <lon>
 ```
 
 | Flag | Default | Description |

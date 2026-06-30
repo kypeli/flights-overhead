@@ -37,8 +37,8 @@ Then open `http://localhost:8080` in your browser.
 | Flag | Default | Description |
 |---|---|---|
 | `-tracker-addr` | `localhost:30003` | ADS-B receiver TCP address `host:port` |
-| `-lat` | `60.1699` | Receiver latitude — used for distance calculations |
-| `-lon` | `24.9384` | Receiver longitude — used for distance calculations |
+| `-lat` | `xx.xxxx` | Receiver latitude — used for distance calculations |
+| `-lon` | `xx.xxxx` | Receiver longitude — used for distance calculations |
 | `-http` | `localhost:8080` | Address for the web dashboard |
 | `-expire` | `60s` | How long before a silent aircraft is dropped from state |
 | `-report` | `5s` | How often to print the terminal flight table |
@@ -48,9 +48,9 @@ Example with custom receiver location:
 
 ```bash
 go run main.go \
-  -tracker-addr "192.168.1.100:30003" \
-  -lat 51.5074 \
-  -lon -0.1278 \
+  -tracker-addr "<IP address of the ADS-B receiver>:30003" \
+  -lat <latitude of ADS-B receiver> \
+  -lon <longitude of ADS-B receiver> \
   -expire 90s
 ```
 
