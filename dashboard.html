@@ -247,31 +247,37 @@
                             >
                                 <th
                                     class="px-md py-sm font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant whitespace-nowrap"
-                                    style="width: 25%"
+                                    style="width: 30%"
                                 >
                                     Callsign
                                 </th>
                                 <th
                                     class="px-md py-sm font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant whitespace-nowrap"
-                                    style="width: 18.75%"
+                                    style="width: 20%"
+                                >
+                                    Route
+                                </th>
+                                <th
+                                    class="px-md py-sm font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant whitespace-nowrap"
+                                    style="width: 12.5%"
                                 >
                                     Altitude (ft)
                                 </th>
                                 <th
                                     class="px-md py-sm font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant whitespace-nowrap"
-                                    style="width: 18.75%"
+                                    style="width: 12.5%"
                                 >
                                     V-Rate (fpm)
                                 </th>
                                 <th
                                     class="px-md py-sm font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant whitespace-nowrap"
-                                    style="width: 18.75%"
+                                    style="width: 12.5%"
                                 >
                                     Distance (nm)
                                 </th>
                                 <th
                                     class="px-md py-sm font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant whitespace-nowrap"
-                                    style="width: 18.75%"
+                                    style="width: 12.5%"
                                 >
                                     Heading
                                 </th>
@@ -284,12 +290,13 @@
                             <!-- Default loading state -->
                             <tr id="empty-row">
                                 <td
-                                    colspan="5"
+                                    colspan="6"
                                     class="px-md py-xl text-center text-on-surface-variant font-body-md"
                                 >
                                     Connecting to live receiver stream...
                                 </td>
                             </tr>
+
                         </tbody>
                     </table>
                 </div>
@@ -415,32 +422,11 @@
                 return alt.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
             }
 
-            function getAircraftType(f) {
-                if (!f || !f.hex_ident) return "Unknown Aircraft";
-                if (f.manufacturer && f.model) {
-                    return f.manufacturer + " • " + f.model;
-                }
-                if (f.model) {
-                    return f.model;
-                }
-                if (f.manufacturer) {
-                    return f.manufacturer;
-                }
-                return (
-                    "ICAO " +
-                    f.hex_ident.toUpperCase() +
-                    " • Active Transponder"
-                );
-            }
-
             function getAircraftHexIdent(f) {
                 if (!f || !f.hex_ident) return "Unknown aircraft";
                 return f.hex_ident;
             }
 
-            function getOperator(f) {
-                return f && f.operator ? f.operator : "";
-            }
 
             function updateUI(data) {
                 if (
@@ -466,7 +452,7 @@
                 if (flights.length === 0) {
                     tbody.innerHTML = `
                         <tr>
-                            <td colspan="5" class="px-md py-xl text-center text-on-surface-variant font-body-md">
+                            <td colspan="6" class="px-md py-xl text-center text-on-surface-variant font-body-md">
                                 No active aircraft tracked overhead. Monitoring airspace...
                             </td>
                         </tr>`;
@@ -517,9 +503,42 @@
                 let rowsHtml = "";
                 flights.forEach((f) => {
                     const callsign = escapeHTML(f.callsign || "------");
-                    const aircraftType = escapeHTML(getAircraftType(f));
                     const aircraftIdentId = escapeHTML(getAircraftHexIdent(f));
                     const alt = formatAltitude(f.altitude);
+
+                    // Build formatted aircraft type/registration label
+                    let aircraftType = "";
+                    if (f.manufacturer && f.model) {
+                        aircraftType = `${f.manufacturer} ${f.model}`;
+                    } else {
+                        aircraftType = f.model || f.manufacturer || "";
+                    }
+                    if (aircraftType === "" && f.icao_type) {
+                        aircraftType = f.icao_type;
+                    }
+                    if (aircraftType === "") {
+                        aircraftType = "Unknown Aircraft";
+                    }
+                    aircraftType = escapeHTML(aircraftType);
+                    if (f.registration) {
+                        aircraftType += ` (Reg: ${escapeHTML(f.registration)})`;
+                    }
+
+                    // Build metadata line (ICAO + Operator)
+                    let metaLineHtml = `ICAO: ${escapeHTML(aircraftIdentId)}`;
+                    if (f.operator) {
+                        metaLineHtml += ` • ${escapeHTML(f.operator)}`;
+                    }
+
+                    // Build Route column
+                    let routeHtml = "";
+                    const origin = f.origin_city || f.origin_iata || f.origin_icao || "";
+                    const dest = f.dest_city || f.dest_iata || f.dest_icao || "";
+                    if (origin && dest) {
+                        routeHtml = `<span class="font-bold text-on-surface">${escapeHTML(origin)} ➔ ${escapeHTML(dest)}</span>`;
+                    } else {
+                        routeHtml = `<span class="text-on-surface-variant font-body-md">---</span>`;
+                    }
 
                     let vrateHtml =
                         '<div class="flex items-center gap-xs"><span>0</span></div>';
@@ -539,7 +558,12 @@
                                 <div class="flex flex-col">
                                     <span class="font-display text-headline-lg leading-none mb-xs text-primary group-hover:text-tertiary transition-colors duration-150">${callsign}</span>
                                     <span class="font-label-sm text-[10px] text-on-surface-variant">${aircraftType}</span>
-                                    ${aircraftIdentId ? `<span class="font-label-sm text-[10px] text-secondary mt-xs">ICAO: ${aircraftIdentId}</span>` : ""}
+                                    <span class="font-label-sm text-[10px] text-secondary mt-xs">${metaLineHtml}</span>
+                                </div>
+                            </td>
+                            <td class="px-md py-md whitespace-nowrap">
+                                <div class="flex flex-col text-headline-lg-mobile">
+                                    ${routeHtml}
                                 </div>
                             </td>
                             <td class="px-md py-md font-bold text-headline-lg-mobile text-on-surface whitespace-nowrap font-mono">${alt}</td>
@@ -552,6 +576,7 @@
 
                 tbody.innerHTML = rowsHtml;
             }
+
         </script>
     </body>
 </html>

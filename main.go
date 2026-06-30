@@ -199,6 +199,8 @@ func main() {
 	// Initialize client and tracker
 	client := sbs.NewClient(cfg.trackerAddr)
 	tracker := sbs.NewTracker()
+	tracker.StartAPIWorker(ctx)
+
 
 	// Connect to ADS-B stream
 	msgChan := client.Start(ctx)
