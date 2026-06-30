@@ -37,8 +37,8 @@ Then open `http://localhost:8080` in your browser.
 | Flag | Default | Description |
 |---|---|---|
 | `-tracker-addr` | `localhost:30003` | ADS-B receiver TCP address `host:port` |
-| `-lat` | `xx.xxxx` | Receiver latitude — used for distance calculations |
-| `-lon` | `xx.xxxx` | Receiver longitude — used for distance calculations |
+| `-lat` | *(required)* | Receiver latitude — used for distance calculations |
+| `-lon` | *(required)* | Receiver longitude — used for distance calculations |
 | `-http` | `localhost:8080` | Address for the web dashboard |
 | `-expire` | `60s` | How long before a silent aircraft is dropped from state |
 | `-report` | `5s` | How often to print the terminal flight table |

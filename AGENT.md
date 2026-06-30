@@ -94,7 +94,7 @@ Converts the comma-separated strings into a structured type-safe Go struct.
 
 ### 2. State Aggregation (`pkg/sbs/tracker.go`)
 Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordinates, MSG,4 updates speed), the thread-safe `sbs.Tracker` accumulates these fields.
-* Uses two separate mutexes: `mu` (`sync.RWMutex`) for the live aircraft registry and `cacheMu` for the adsbdb.com API caches. Never acquire `mu` while holding `cacheMu`, and vice versa — `triggerRouteLookup` is called from `UpdateState` (which holds `mu.Lock()`) and must not re-acquire `mu`.
+* Uses two separate mutexes: `mu` (`sync.RWMutex`) for the live aircraft registry and `cacheMu` for the adsbdb.com API caches. Never acquire `mu` while holding `cacheMu`, and vice versa — both `triggerAircraftLookup` and `triggerRouteLookup` are called from `UpdateState` (which holds `mu.Lock()`) and must not re-acquire `mu`.
 * **Garbage-Collection**: Exposes an `EvictStale(maxAge time.Duration)` routine that purges stale flights that haven't sent updates within a configured interval.
 * **Explicit Dropping**: Instantly evicts aircraft from the state database when receiving an explicit `STA` status change message with code `RM` (Remove) or `AD` (Aircraft Delete).
 * **API Enrichment**: On first sight of a new hex ID, queues an aircraft metadata lookup; on first sight of a callsign, queues a route lookup. Both paths check the cache first (cache-hit is synchronous, cache-miss queues an async fetch).
@@ -141,8 +141,8 @@ go run main.go -tracker-addr "localhost:30003" -expire 60s -report 5s -lat <lat>
 | `-expire` | `60s` | Duration after which a silent aircraft is evicted from state. |
 | `-report` | `5s` | Interval for printing the terminal flight dashboard. |
 | `-http` | `localhost:8080` | Address for the embedded web dashboard HTTP server. |
-| `-lat` | `60.1699` | Receiver latitude (used for distance calculations). |
-| `-lon` | `24.9384` | Receiver longitude (used for distance calculations). |
+| `-lat` | *(required)* | Receiver latitude (used for distance calculations). |
+| `-lon` | *(required)* | Receiver longitude (used for distance calculations). |
 | `-debug` | `false` | Enables verbose per-line parser logging. |
 
 ---
