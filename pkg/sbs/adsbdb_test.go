@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 )
@@ -150,10 +151,10 @@ func TestTracker_APIIntegration(t *testing.T) {
 
 	tracker.UpdateState(msg)
 
-	// Wait up to 2 seconds for worker to process lookups
+	// Wait up to 5 seconds for worker to process lookups (two requests at 500ms each = min 1s)
 	var ac Aircraft
 	var found bool
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		ac, found = tracker.Get("4006EA")
 		if found && ac.Registration == "G-VIIA" && ac.OriginCity == "London" {
@@ -177,5 +178,61 @@ func TestTracker_APIIntegration(t *testing.T) {
 	}
 	if ac.DestCity != "Helsinki" {
 		t.Errorf("expected dest city Helsinki, got %s", ac.DestCity)
+	}
+}
+
+// TestApiRequestTypeRouting verifies that aircraftType dispatches to the /aircraft/{hex}
+// endpoint and routeType dispatches to the /callsign/{callsign} endpoint.
+// An accidental swap of the iota constants would be caught here.
+func TestApiRequestTypeRouting(t *testing.T) {
+	var mu sync.Mutex
+	var paths []string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"response": "not found"}`))
+	}))
+	defer server.Close()
+
+	oldBaseURL := adsbDBBaseURL
+	adsbDBBaseURL = server.URL
+	defer func() { adsbDBBaseURL = oldBaseURL }()
+
+	tracker := NewTracker()
+	tracker.httpClient = server.Client()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tracker.StartAPIWorker(ctx)
+
+	tracker.apiQueue <- apiRequest{hexIdent: "AABBCC", reqType: aircraftType}
+	tracker.apiQueue <- apiRequest{hexIdent: "AABBCC", callsign: "TST001", reqType: routeType}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		n := len(paths)
+		mu.Unlock()
+		if n >= 2 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	mu.Lock()
+	got := make([]string, len(paths))
+	copy(got, paths)
+	mu.Unlock()
+
+	if len(got) != 2 {
+		t.Fatalf("expected 2 API requests, got %d: %v", len(got), got)
+	}
+	if got[0] != "/aircraft/AABBCC" {
+		t.Errorf("aircraftType should route to /aircraft/{hex}, got %s", got[0])
+	}
+	if got[1] != "/callsign/TST001" {
+		t.Errorf("routeType should route to /callsign/{callsign}, got %s", got[1])
 	}
 }

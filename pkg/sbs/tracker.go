@@ -16,10 +16,17 @@ import (
 
 var adsbDBBaseURL = "https://api.adsbdb.com/v0"
 
+type apiRequestType int
+
+const (
+	aircraftType apiRequestType = iota
+	routeType
+)
+
 type apiRequest struct {
 	hexIdent string
 	callsign string
-	reqType  string // "aircraft" or "route"
+	reqType  apiRequestType
 }
 
 type cachedAircraft struct {
@@ -79,10 +86,13 @@ func (t *Tracker) StartAPIWorker(ctx context.Context) {
 				case <-ticker.C:
 				}
 
-				if req.reqType == "aircraft" {
+				switch req.reqType {
+				case aircraftType:
 					t.fetchAircraftDetails(req.hexIdent)
-				} else if req.reqType == "route" {
+				case routeType:
 					t.fetchRouteDetails(req.hexIdent, req.callsign)
+				default:
+					slog.Warn("Unknown request type.", "type", req.reqType)
 				}
 			}
 		}
@@ -249,7 +259,7 @@ func (t *Tracker) triggerAircraftLookup(ac *Aircraft) {
 	t.cacheMu.Unlock()
 
 	select {
-	case t.apiQueue <- apiRequest{hexIdent: hex, reqType: "aircraft"}:
+	case t.apiQueue <- apiRequest{hexIdent: hex, reqType: aircraftType}:
 	default:
 		t.cacheMu.Lock()
 		delete(t.aircraftCache, hex)
@@ -295,7 +305,7 @@ func (t *Tracker) triggerRouteLookup(ac *Aircraft, callsign string) {
 	t.cacheMu.Unlock()
 
 	select {
-	case t.apiQueue <- apiRequest{hexIdent: hex, callsign: callsign, reqType: "route"}:
+	case t.apiQueue <- apiRequest{hexIdent: hex, callsign: callsign, reqType: routeType}:
 	default:
 		t.cacheMu.Lock()
 		delete(t.routeCache, callsign)
