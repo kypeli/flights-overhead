@@ -216,7 +216,6 @@ func main() {
 	tracker := sbs.NewTracker()
 	tracker.StartAPIWorker(ctx)
 
-
 	// Connect to ADS-B stream
 	msgChan := client.Start(ctx)
 
