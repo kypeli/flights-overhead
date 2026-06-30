@@ -94,6 +94,9 @@ type Broker struct {
 	clients map[chan string]bool
 }
 
+// Broker must implement http.Handler
+var _ http.Handler = (*Broker)(nil)
+
 func NewBroker() *Broker {
 	return &Broker{
 		clients: make(map[chan string]bool),
