@@ -22,7 +22,6 @@ type apiRequest struct {
 	reqType  string // "aircraft" or "route"
 }
 
-
 type cachedAircraft struct {
 	pending  bool
 	notFound bool
@@ -137,7 +136,7 @@ func (t *Tracker) UpdateState(msg *Message) (Aircraft, bool) {
 		if cleanedCallsign != "" && cleanedCallsign != ac.Callsign {
 			ac.Callsign = cleanedCallsign
 			// Trigger route details lookup (from cache or queue async fetch)
-			t.triggerRouteLookup(ac.HexIdent, cleanedCallsign)
+			t.triggerRouteLookup(ac, cleanedCallsign)
 		}
 	}
 	if msg.Altitude != nil {
@@ -259,7 +258,11 @@ func (t *Tracker) triggerAircraftLookup(ac *Aircraft) {
 	}
 }
 
-func (t *Tracker) triggerRouteLookup(hex string, callsign string) {
+// triggerRouteLookup is always called from UpdateState, which holds t.mu.Lock().
+// The cache-hit path must NOT re-acquire t.mu — update ac directly instead.
+func (t *Tracker) triggerRouteLookup(ac *Aircraft, callsign string) {
+	hex := ac.HexIdent
+
 	t.cacheMu.RLock()
 	cached, found := t.routeCache[callsign]
 	t.cacheMu.RUnlock()
@@ -267,26 +270,21 @@ func (t *Tracker) triggerRouteLookup(hex string, callsign string) {
 	if found {
 		if !cached.pending && !cached.notFound && cached.data != nil && cached.data.FlightRoute != nil {
 			fr := cached.data.FlightRoute
-			t.mu.Lock()
-			if ac, exists := t.byHex[hex]; exists {
-				if fr.Origin != nil {
-					ac.OriginICAO = fr.Origin.ICAOCode
-					ac.OriginIATA = fr.Origin.IATACode
-					ac.OriginName = fr.Origin.Name
-					ac.OriginCity = fr.Origin.Municipality
-				}
-				if fr.Destination != nil {
-					ac.DestICAO = fr.Destination.ICAOCode
-					ac.DestIATA = fr.Destination.IATACode
-					ac.DestName = fr.Destination.Name
-					ac.DestCity = fr.Destination.Municipality
-				}
+			if fr.Origin != nil {
+				ac.OriginICAO = fr.Origin.ICAOCode
+				ac.OriginIATA = fr.Origin.IATACode
+				ac.OriginName = fr.Origin.Name
+				ac.OriginCity = fr.Origin.Municipality
 			}
-			t.mu.Unlock()
+			if fr.Destination != nil {
+				ac.DestICAO = fr.Destination.ICAOCode
+				ac.DestIATA = fr.Destination.IATACode
+				ac.DestName = fr.Destination.Name
+				ac.DestCity = fr.Destination.Municipality
+			}
 		}
 		return
 	}
-
 
 	t.cacheMu.Lock()
 	if _, exists := t.routeCache[callsign]; exists {

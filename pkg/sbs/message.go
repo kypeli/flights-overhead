@@ -21,14 +21,14 @@ const (
 type TransmissionType int
 
 const (
-	TransIdentAndCategory  TransmissionType = 1 // MSG 1: Callsign
-	TransSurfacePosition   TransmissionType = 2 // MSG 2: Surface position
-	TransAirbornePosition  TransmissionType = 3 // MSG 3: Airborne position (Lat, Lon, Alt, Ground)
-	TransAirborneVelocity  TransmissionType = 4 // MSG 4: Airborne velocity (Speed, Track, VertRate)
-	TransSurveillanceAlt   TransmissionType = 5 // MSG 5: Surveillance altitude (Alt, Alert, SPI, Ground)
-	TransSurveillanceID    TransmissionType = 6 // MSG 6: Surveillance identification (Squawk, Alert, SPI, Ground)
-	TransAirToAir          TransmissionType = 7 // MSG 7: Air to air (Alt, Ground)
-	TransAllCallReply      TransmissionType = 8 // MSG 8: All call reply (Ground)
+	TransIdentAndCategory TransmissionType = 1 // MSG 1: Callsign
+	TransSurfacePosition  TransmissionType = 2 // MSG 2: Surface position
+	TransAirbornePosition TransmissionType = 3 // MSG 3: Airborne position (Lat, Lon, Alt, Ground)
+	TransAirborneVelocity TransmissionType = 4 // MSG 4: Airborne velocity (Speed, Track, VertRate)
+	TransSurveillanceAlt  TransmissionType = 5 // MSG 5: Surveillance altitude (Alt, Alert, SPI, Ground)
+	TransSurveillanceID   TransmissionType = 6 // MSG 6: Surveillance identification (Squawk, Alert, SPI, Ground)
+	TransAirToAir         TransmissionType = 7 // MSG 7: Air to air (Alt, Ground)
+	TransAllCallReply     TransmissionType = 8 // MSG 8: All call reply (Ground)
 )
 
 type StatusChange string
@@ -55,13 +55,13 @@ type Message struct {
 	Callsign     string
 	StatusChange *StatusChange
 
-	Altitude     *int      // feet
-	GroundSpeed  *float64  // knots
-	Track        *float64  // degrees (0-359)
-	Latitude     *float64  // decimal degrees
-	Longitude    *float64  // decimal degrees
-	VerticalRate *int      // feet/min
-	Squawk       string    // 4-digit octal transponder code
+	Altitude     *int     // feet
+	GroundSpeed  *float64 // knots
+	Track        *float64 // degrees (0-359)
+	Latitude     *float64 // decimal degrees
+	Longitude    *float64 // decimal degrees
+	VerticalRate *int     // feet/min
+	Squawk       string   // 4-digit octal transponder code
 	Alert        *bool
 	Emergency    *bool
 	SPI          *bool
