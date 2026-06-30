@@ -13,13 +13,14 @@ Connect it to an ADS-B receiver (like a RTL-SDR dongle running `dump1090`) and i
 - 🌐 Serve a live **web dashboard** at `http://localhost:8080` updated every second via Server-Sent Events
 - 🖥️ Print a terminal table of all active flights at a configurable interval
 - 🔁 Automatically expire aircraft that go silent and reconnect to the receiver if the connection drops
+- ✈️ Enrich each flight with aircraft type, registration, operator, and route (origin → destination) via live lookups against [adsbdb.com](https://www.adsbdb.com/)
 
 ## 📦 Requirements
 
 - Go 1.21+
 - An ADS-B receiver with `dump1090` (or equivalent) running and exposing a BaseStation TCP stream, typically on port `30003`
 
-No external Go dependencies — standard library only.
+No external Go dependencies — standard library only. Aircraft and route data is fetched live from [adsbdb.com](https://www.adsbdb.com/); an internet connection is required for those enrichments but not for core tracking.
 
 ## 🚀 Quick start
 
@@ -57,7 +58,8 @@ go run main.go \
 
 The web UI shows a live table of all tracked aircraft sorted by distance from your receiver, including:
 
-- **Callsign** and ICAO hex address
+- **Callsign**, aircraft model, registration, and operator — enriched via adsbdb.com
+- **Route** — origin and destination city (e.g. `Helsinki → Oslo`) when available
 - **Altitude** (ft) and **vertical rate** (fpm) with climb/descent colour coding
 - **Distance** (nautical miles) and **heading** direction
 - 🚨 **Emergency squawk watch** — highlights any aircraft squawking 7500, 7600, or 7700
@@ -75,6 +77,7 @@ RTL-SDR dongle
  flights-overhead
       ├── parser     CSV line → typed Message struct
       ├── tracker    incremental state aggregation per ICAO hex ID
+      ├── adsbdb     live aircraft & route lookups (adsbdb.com API)
       ├── broker     Server-Sent Events fan-out to browser clients
       └── dashboard  embedded HTML/JS served at :8080
 ```
@@ -83,10 +86,14 @@ SBS-1 messages are incremental — one message updates the callsign, another the
 
 The TCP client reconnects automatically with exponential backoff (500 ms → 30 s) if the receiver goes offline.
 
-### ✈️ Offline Aircraft Lookup Database
-To display accurate aircraft manufacturers and model types (e.g. `Boeing • 737-800`), `flights-overhead` incorporates an embedded, local database of over 500,000 aircraft:
-* **Map-Based Lookup**: On startup, `aircraft_db.csv.gz` (only **4.0 MB** compressed) is decompressed once and loaded into a `map[string][3]string` keyed by ICAO hex address, giving O(1) lookups with minimal latency.
-* **Database Compiler Script**: The helper script `scripts/build_db.go` can be run at any time to download and compile the latest crowdsourced registry from `wiedehopf/tar1090-db`. It filters out records that do not contain model details and strips unused columns to optimize storage.
+### ✈️ Live Aircraft & Route Enrichment
+
+When a new aircraft or callsign is first seen, `flights-overhead` queues an asynchronous lookup against the [adsbdb.com](https://www.adsbdb.com/) API (rate-limited to 2 requests/second):
+
+- **`/aircraft/{hex}`** — returns manufacturer, model, ICAO type, registration, and registered owner
+- **`/callsign/{callsign}`** — returns the flight route with origin and destination airport details
+
+Results are cached in memory for the lifetime of the process. Lookups are deduplicated so the same ICAO address or callsign is only fetched once regardless of how many messages arrive for it. If the API queue fills up or a lookup fails, the aircraft is still tracked — it simply won't have enrichment data.
 
 ## 🧪 Running the tests
 
@@ -100,18 +107,14 @@ go test -v ./...
 flights-overhead/
 ├── main.go              # CLI entrypoint, HTTP server, SSE broker, event loop
 ├── dashboard.html       # Embedded web UI (compiled into the binary)
-├── scripts/
-│   └── build_db.go      # Resilient build-time builder/compiler for aircraft database
 └── pkg/sbs/
     ├── message.go       # SBS-1 message types and field definitions
-    ├── aircraft.go      # Aggregated aircraft state struct (with manufacturer/model)
+    ├── aircraft.go      # Aggregated aircraft state struct
     ├── parser.go        # CSV → Message parser
-    ├── tracker.go       # Thread-safe aircraft state registry (with DB query)
+    ├── tracker.go       # Thread-safe aircraft state registry & enrichment cache
+    ├── adsbdb.go        # adsbdb.com API client (aircraft & route structs + JSON parsing)
     ├── client.go        # TCP connection manager with auto-reconnect
-    ├── geo.go           # Haversine distance and heading utilities
-    ├── db.go            # Embedded database engine & map-based ICAO hex lookup
-    ├── db_test.go       # Unit tests for database lookup and parsing
-    └── aircraft_db.csv.gz # Gzipped lookup database (embedded in the Go binary, ~4.0 MB)
+    └── geo.go           # Haversine distance and heading utilities
 ```
 
 ## 📻 Setting up an ADS-B receiver
