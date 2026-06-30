@@ -46,9 +46,24 @@ func parseConfig() config {
 	reportFlag := flag.Duration("report", 5*time.Second, "reporting frequency interval")
 	debugFlag := flag.Bool("debug", false, "enable debug logging mode")
 	httpFlag := flag.String("http", "localhost:8080", "web dashboard HTTP address (host:port)")
-	latFlag := flag.Float64("lat", 60.1699, "receiver latitude coordinate")
-	lonFlag := flag.Float64("lon", 24.9384, "receiver longitude coordinate")
+	latFlag := flag.Float64("lat", 0, "receiver latitude coordinate (required)")
+	lonFlag := flag.Float64("lon", 0, "receiver longitude coordinate (required)")
 	flag.Parse()
+
+	latSet, lonSet := false, false
+	flag.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "lat":
+			latSet = true
+		case "lon":
+			lonSet = true
+		}
+	})
+	if !latSet || !lonSet {
+		fmt.Fprintln(os.Stderr, "error: -lat and -lon are required")
+		flag.Usage()
+		os.Exit(2)
+	}
 
 	return config{
 		trackerAddr: *trackerAddrFlag,
