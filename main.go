@@ -18,16 +18,22 @@ import (
 	"flights-overhead/broadcast"
 	"flights-overhead/frontend"
 	"flights-overhead/pkg/sbs"
+	"flights-overhead/sbsfirestore"
+
+	"cloud.google.com/go/firestore"
 )
 
 // config holds all runtime configuration parsed from CLI flags.
 type config struct {
-	trackerAddr string
-	httpAddr    string
-	expire      time.Duration
-	report      time.Duration
-	lat, lon    float64
-	debug       bool
+	trackerAddr      string
+	httpAddr         string
+	expire           time.Duration
+	report           time.Duration
+	lat, lon         float64
+	debug            bool
+	firestoreProject string
+
+	firestoreCreds string
 }
 
 // parseConfig parses all CLI flags and returns a populated config.
@@ -39,6 +45,10 @@ func parseConfig() config {
 	httpFlag := flag.String("http", "localhost:8080", "web dashboard HTTP address (host:port)")
 	latFlag := flag.Float64("lat", 0, "receiver latitude coordinate (required)")
 	lonFlag := flag.Float64("lon", 0, "receiver longitude coordinate (required)")
+
+	firestoreProjectFlag := flag.String("firestore-project", "", "Firebase Project ID for Firestore integration")
+	firestoreCredsFlag := flag.String("firestore-credentials", "", "path to the service account credentials JSON key file")
+
 	flag.Parse()
 
 	latSet, lonSet := false, false
@@ -56,14 +66,23 @@ func parseConfig() config {
 		os.Exit(2)
 	}
 
+	// Ensure both Firestore flags are provided
+	if *firestoreProjectFlag == "" || *firestoreCredsFlag == "" {
+		fmt.Fprintln(os.Stderr, "error: both -firestore-project and -firestore-credentials must be provided")
+		flag.Usage()
+		os.Exit(2)
+	}
+
 	return config{
-		trackerAddr: *trackerAddrFlag,
-		httpAddr:    *httpFlag,
-		expire:      *expireFlag,
-		report:      *reportFlag,
-		lat:         *latFlag,
-		lon:         *lonFlag,
-		debug:       *debugFlag,
+		trackerAddr:      *trackerAddrFlag,
+		httpAddr:         *httpFlag,
+		expire:           *expireFlag,
+		report:           *reportFlag,
+		lat:              *latFlag,
+		lon:              *lonFlag,
+		debug:            *debugFlag,
+		firestoreProject: *firestoreProjectFlag,
+		firestoreCreds:   *firestoreCredsFlag,
 	}
 }
 
@@ -103,6 +122,30 @@ func main() {
 	tracker := sbs.NewTracker()
 	tracker.StartAPIWorker(ctx)
 
+	// Initialize Firestore client if project ID is provided
+	var firestoreClient *firestore.Client
+	if cfg.firestoreProject != "" {
+		slog.Info("initializing Cloud Firestore client...", "project", cfg.firestoreProject)
+
+		var err error
+		firestoreClient, err = sbsfirestore.NewFirestoreClient(ctx, sbsfirestore.Config{
+			FirestoreProject: cfg.firestoreProject,
+			FirestoreCreds:   cfg.firestoreCreds,
+		})
+		if err != nil {
+			slog.Error("failed to initialize Firestore client", "error", err)
+			cancel()
+			return
+		}
+
+		defer func() {
+			slog.Info("closing Firestore client...")
+			if err := firestoreClient.Close(); err != nil {
+				slog.Error("error closing Firestore client", "error", err)
+			}
+		}()
+	}
+
 	// Connect to ADS-B stream
 	msgChan := client.Start(ctx)
 
@@ -126,6 +169,10 @@ func main() {
 			cancel()
 		}
 	}()
+
+	// Create receivers
+	sseReceiver := createSSEReceivers(broker, cfg.lat, cfg.lon, cfg.trackerAddr)
+	firestoreReceiver := createFirestoreReceiver(ctx, firestoreClient)
 
 	slog.Info("listening for incoming messages...")
 
@@ -162,12 +209,21 @@ func main() {
 		case <-broadcastTicker.C:
 			// Broadcast latest flight telemetry to connected web clients
 			flightsReceivers := []broadcast.FlightsReceiver{
-				broadcast.NewSSEFlightsReceiver(broker, cfg.lat, cfg.lon, cfg.trackerAddr),
+				sseReceiver,
+				firestoreReceiver,
 			}
 
-			for i := range flightsReceivers {
-				broadcast.Broadcast(flightsReceivers[i], tracker)
+			for _, r := range flightsReceivers {
+				broadcast.Broadcast(r, tracker)
 			}
 		}
 	}
+}
+
+func createSSEReceivers(broker *frontend.SSEBroker, lat, lon float64, trackerAddr string) *broadcast.SSEFlightsReceiver {
+	return broadcast.NewSSEFlightsReceiver(broker, lat, lon, trackerAddr)
+}
+
+func createFirestoreReceiver(ctx context.Context, client *firestore.Client) *broadcast.FirestoreFlightsReceiver {
+	return broadcast.NewFirestoreFlightsReceiver(ctx, client)
 }
