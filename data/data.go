@@ -6,7 +6,7 @@ import (
 
 // FlightJSON defines the telemetry representation of tracked aircraft.
 type FlightJSON struct {
-	Aircraft  sbs.Aircraft
+	sbs.Aircraft
 	Distance  float64 `json:"distance"`
 	Direction string  `json:"direction,omitempty"`
 }
