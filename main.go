@@ -6,27 +6,18 @@ package main
 import (
 	"context"
 	_ "embed"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"sort"
-	"sync"
 	"syscall"
-	"text/tabwriter"
 	"time"
 
+	"flights-overhead/broadcast"
+	"flights-overhead/frontend"
 	"flights-overhead/pkg/sbs"
-)
-
-//go:embed dashboard.html
-var dashboardHTML []byte
-
-const (
-	sseChanBuffer = 10
 )
 
 // config holds all runtime configuration parsed from CLI flags.
@@ -88,110 +79,6 @@ func initLogger(debug bool) {
 	slog.SetDefault(logger)
 }
 
-// FlightJSON defines the web-facing telemetry representation of tracked aircraft.
-type FlightJSON struct {
-	sbs.Aircraft
-	Distance  float64 `json:"distance"`
-	Direction string  `json:"direction,omitempty"`
-}
-
-// StreamPayload represents the complete live radar broadcast payload.
-type StreamPayload struct {
-	ReceiverLat  float64      `json:"receiver_lat"`
-	ReceiverLon  float64      `json:"receiver_lon"`
-	ReceiverAddr string       `json:"receiver_addr"`
-	Flights      []FlightJSON `json:"flights"`
-}
-
-// Broker coordinates real-time thread-safe Server-Sent Events (SSE) streaming.
-type Broker struct {
-	mu      sync.Mutex
-	clients map[chan string]bool
-}
-
-// Broker must implement http.Handler
-var _ http.Handler = (*Broker)(nil)
-
-func NewBroker() *Broker {
-	return &Broker{
-		clients: make(map[chan string]bool),
-	}
-}
-
-func (b *Broker) Register(ch chan string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.clients[ch] = true
-}
-
-func (b *Broker) Unregister(ch chan string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	delete(b.clients, ch)
-	close(ch)
-}
-
-func (b *Broker) Broadcast(msg string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for ch := range b.clients {
-		select {
-		case ch <- msg:
-		default:
-			// Client's channel is blocked; skip to avoid stalling the broadcaster
-		}
-	}
-}
-
-func (b *Broker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
-		return
-	}
-
-	ch := make(chan string, sseChanBuffer)
-	b.Register(ch)
-	defer b.Unregister(ch)
-
-	ctx := r.Context()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case msg, ok := <-ch:
-			if !ok {
-				return
-			}
-			_, err := fmt.Fprintf(w, "data: %s\n\n", msg)
-			if err != nil {
-				return
-			}
-			flusher.Flush()
-		}
-	}
-}
-
-// newHTTPHandler creates an explicit ServeMux with routes registered for the dashboard and SSE broker.
-func newHTTPHandler(broker *Broker) http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "text/html")
-		w.Write(dashboardHTML)
-	})
-	mux.Handle("/events", broker)
-	return mux
-}
-
 func main() {
 	cfg := parseConfig()
 	initLogger(cfg.debug)
@@ -230,10 +117,11 @@ func main() {
 	defer broadcastTicker.Stop()
 
 	// Launch embedded HTTP web server with the SSE broker
-	broker := NewBroker()
+	broker := frontend.NewSSEBroker()
+	httpHandler := frontend.NewHTTPHandler(broker)
 	go func() {
 		slog.Info("starting web dashboard server...", "addr", cfg.httpAddr)
-		if err := http.ListenAndServe(cfg.httpAddr, newHTTPHandler(broker)); err != nil {
+		if err := http.ListenAndServe(cfg.httpAddr, httpHandler); err != nil {
 			slog.Error("HTTP server failed to start", "error", err)
 			cancel()
 		}
@@ -262,7 +150,7 @@ func main() {
 
 		case <-reportTicker.C:
 			// Print standard status dashboard report
-			printOverheadDashboard(tracker)
+			frontend.PrintOverheadDashboard(tracker)
 
 		case <-cleanupTicker.C:
 			// Evict flights that haven't sent reports within the expiration threshold
@@ -273,114 +161,13 @@ func main() {
 
 		case <-broadcastTicker.C:
 			// Broadcast latest flight telemetry to connected web clients
-			broadcastFlights(tracker, broker, cfg.lat, cfg.lon, cfg.trackerAddr)
+			flightsReceivers := []broadcast.FlightsReceiver{
+				broadcast.NewSSEFlightsReceiver(broker, cfg.lat, cfg.lon, cfg.trackerAddr),
+			}
+
+			for i := range flightsReceivers {
+				broadcast.Broadcast(flightsReceivers[i], tracker)
+			}
 		}
 	}
-}
-
-// broadcastFlights formats all tracked flights and pushes a JSON payload to the SSE broker.
-func broadcastFlights(tracker *sbs.Tracker, broker *Broker, receiverLat, receiverLon float64, receiverAddr string) {
-	active := tracker.GetAllActive()
-	flights := make([]FlightJSON, 0, len(active))
-
-	for _, ac := range active {
-		dist := sbs.DistanceNM(receiverLat, receiverLon, ac.Latitude, ac.Longitude)
-		var direction string
-		if ac.HasTrack {
-			direction = sbs.TrackToDirection(ac.Track)
-		}
-
-		flights = append(flights, FlightJSON{
-			Aircraft:  ac,
-			Distance:  dist,
-			Direction: direction,
-		})
-	}
-
-	// Sort by distance ascending; fall back to callsign for flights without position.
-	sort.Slice(flights, func(i, j int) bool {
-		iPos := flights[i].HasPosition
-		jPos := flights[j].HasPosition
-		if iPos && jPos {
-			return flights[i].Distance < flights[j].Distance
-		}
-		if iPos != jPos {
-			return iPos
-		}
-		ci := flights[i].Callsign
-		if ci == "" {
-			ci = flights[i].HexIdent
-		}
-		cj := flights[j].Callsign
-		if cj == "" {
-			cj = flights[j].HexIdent
-		}
-		return ci < cj
-	})
-
-	payload := StreamPayload{
-		ReceiverLat:  receiverLat,
-		ReceiverLon:  receiverLon,
-		ReceiverAddr: receiverAddr,
-		Flights:      flights,
-	}
-
-	data, err := json.Marshal(payload)
-	if err != nil {
-		slog.Error("failed to marshal broadcast payload", "error", err)
-		return
-	}
-	broker.Broadcast(string(data))
-}
-
-// printOverheadDashboard prints the list of currently tracked flights overhead as a formatted table.
-func printOverheadDashboard(tracker *sbs.Tracker) {
-	active := tracker.GetAllActive()
-	if len(active) == 0 {
-		fmt.Println("\n--- Flights Overhead Tracker: No active aircraft tracked currently ---")
-		return
-	}
-
-	fmt.Printf("\n--- Flights Overhead Tracker: %d Active Aircraft Tracked Overhead ---\n", len(active))
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.Debug)
-	fmt.Fprintln(w, "ICAO HEX\tCALLSIGN\tALTITUDE (FT)\tSPEED (KT)\tTRACK (°)\tLATITUDE\tLONGITUDE\tSQUAWK\tMSGS\tLAST SEEN")
-
-	now := time.Now()
-	for _, ac := range active {
-		callsign := ac.Callsign
-		if callsign == "" {
-			callsign = "------"
-		}
-
-		squawk := ac.Squawk
-		if squawk == "" {
-			squawk = "----"
-		}
-
-		coordsFormat := "%.5f"
-		latStr := fmt.Sprintf(coordsFormat, ac.Latitude)
-		lonStr := fmt.Sprintf(coordsFormat, ac.Longitude)
-		if !ac.HasPosition {
-			latStr = "------"
-			lonStr = "------"
-		}
-
-		lastSeenAgo := now.Sub(ac.LastSeen).Truncate(time.Second)
-
-		fmt.Fprintf(w, "%s\t%s\t%d\t%.1f\t%.1f\t%s\t%s\t%s\t%d\t%s ago\n",
-			ac.HexIdent,
-			callsign,
-			ac.Altitude,
-			ac.GroundSpeed,
-			ac.Track,
-			latStr,
-			lonStr,
-			squawk,
-			ac.MessageCount,
-			lastSeenAgo,
-		)
-	}
-	w.Flush()
-	fmt.Println()
 }
