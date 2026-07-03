@@ -1,2 +1,4 @@
 .claude/*
 service-account-key.json
+skills-lock.json
+.DS_Store
