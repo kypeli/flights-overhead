@@ -1,0 +1,23 @@
+[Unit]
+Description=Flights Overhead Server
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi
+# Update the flags below with your actual tracker IP, coordinates, project ID, and credentials path
+ExecStart=/home/pi/flights-overhead \
+  -tracker-addr="127.0.0.1:30003" \
+  -http="0.0.0.0:8080" \
+  -lat="60.1699" \
+  -lon="24.9384" \
+  -firestore-project="flights-overhead" \
+  -firestore-credentials="/home/pi/service-account-key.json"
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
