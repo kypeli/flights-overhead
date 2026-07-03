@@ -106,7 +106,6 @@ func (r *FirestoreFlightsReceiver) process(flights []data.FlightJSON) {
 			"latitude":        f.Aircraft.Latitude,
 			"longitude":       f.Aircraft.Longitude,
 			"altitude":        f.Aircraft.Altitude,
-			"speed":           f.Aircraft.GroundSpeed,
 			"manufacturer":    f.Aircraft.Manufacturer,
 			"model":           f.Aircraft.Model,
 			"registration":    f.Aircraft.Registration,
