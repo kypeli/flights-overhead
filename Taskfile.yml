@@ -6,6 +6,11 @@ tasks:
     cmds:
       - go build -o flights-overhead main.go
 
+  build-pi:
+    desc: Build the flights-overhead server binary for Raspberry Pi (Linux/arm64)
+    cmds:
+      - GOOS=linux GOARCH=arm64 go build -o flights-overhead-pi main.go
+
   run:
     desc: Build and start the server with coordinates and firestore credentials
     deps: [build]
