@@ -11,6 +11,16 @@ tasks:
     cmds:
       - GOOS=linux GOARCH=arm64 go build -o flights-overhead-pi main.go
 
+  deploy-pi:
+    desc: Build and deploy the binary to Raspberry Pi via scp
+    deps: [build-pi]
+    vars:
+      PI_HOST: '{{.PI_HOST | default "pi24-bookworm.local"}}'
+      PI_USER: '{{.PI_USER | default "pi"}}'
+      PI_PATH: '{{.PI_PATH | default "~/flights-overhead"}}'
+    cmds:
+      - scp flights-overhead-pi {{.PI_USER}}@{{.PI_HOST}}:{{.PI_PATH}}
+
   run:
     desc: Build and start the server with coordinates and firestore credentials
     deps: [build]
