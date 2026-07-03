@@ -1,0 +1,27 @@
+version: '3'
+
+tasks:
+  build:
+    desc: Build the flights-overhead server binary
+    cmds:
+      - go build -o flights-overhead main.go
+
+  run:
+    desc: Build and start the server with coordinates and firestore credentials
+    deps: [build]
+    vars:
+      LAT: '{{.LAT}}'
+      LON: '{{.LON}}'
+      TRACKER: '{{.TRACKER}}'
+      PROJECT: '{{.PROJECT | default "flights-overhead"}}'
+      CREDENTIALS: '{{.CREDENTIALS | default "service-account-key.json"}}'
+      WEBSERVER: '{{.WEBSERVER | default "localhost:8080"}}'
+    preconditions:
+      - sh: 'test -n "{{.TRACKER}}"'
+        msg: "Error: TRACKER parameter is required. Run as: task run TRACKER=<tracker> LAT=<latitude> LON=<longitude> [PROJECT=<project_id>] [CREDENTIALS=<credentials_path>] [args...]"
+      - sh: 'test -n "{{.LAT}}"'
+        msg: "Error: LAT parameter is required. Run as: task run TRACKER=<tracker> LAT=<latitude> LON=<longitude> [PROJECT=<project_id>] [CREDENTIALS=<credentials_path>] [args...]"
+      - sh: 'test -n "{{.LON}}"'
+        msg: "Error: LON parameter is required. Run as: task run TRACKER=<tracker> LAT=<latitude> LON=<longitude> [PROJECT=<project_id>] [CREDENTIALS=<credentials_path>] [args...]"
+    cmds:
+      - ./flights-overhead -tracker-addr="{{.TRACKER}}:30003" -http="{{.WEBSERVER}}" -lat="{{.LAT}}" -lon="{{.LON}}" -firestore-project="{{.PROJECT}}" -firestore-credentials="{{.CREDENTIALS}}" {{.CLI_ARGS}}
