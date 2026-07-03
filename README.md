@@ -75,11 +75,12 @@ RTL-SDR dongle
       │ TCP :30003 (SBS-1 / BaseStation format)
       │
  flights-overhead
-      ├── parser     CSV line → typed Message struct
-      ├── tracker    incremental state aggregation per ICAO hex ID
-      ├── adsbdb     live aircraft & route lookups (adsbdb.com API)
-      ├── broker     Server-Sent Events fan-out to browser clients
-      └── dashboard  embedded HTML/JS served at :8080
+      ├── pkg/sbs/parser     CSV line → typed Message struct
+      ├── pkg/sbs/tracker    incremental state aggregation per ICAO hex ID
+      ├── pkg/sbs/adsbdb     live aircraft & route lookups (adsbdb.com API)
+      ├── broadcast          fan-out flight snapshots to receivers
+      ├── frontend/broker    Server-Sent Events fan-out to browser clients
+      └── frontend/dashboard embedded HTML/JS served at :8080
 ```
 
 SBS-1 messages are incremental — one message updates the callsign, another the position, another the speed. The tracker merges them into a single up-to-date `Aircraft` record per ICAO address. Aircraft that stop transmitting are expired after the configured `-expire` duration; aircraft that send an explicit `STA RM` or `STA AD` message are removed immediately.
@@ -105,16 +106,25 @@ go test -v ./...
 
 ```
 flights-overhead/
-├── main.go              # CLI entrypoint, HTTP server, SSE broker, event loop
-├── dashboard.html       # Embedded web UI (compiled into the binary)
+├── main.go                    # CLI entrypoint and event loop
+├── broadcast/
+│   ├── broadcaster.go         # FlightsReceiver interface and snapshot fan-out
+│   └── SSEFlightsReceiver.go  # Distance/sort enrichment, SSE payload serialiser
+├── data/
+│   └── data.go                # Shared types: FlightJSON, StreamPayload
+├── frontend/
+│   ├── broker.go              # SSEBroker — thread-safe SSE client registry
+│   ├── console.go             # Terminal flight table printer
+│   ├── dashboard.html         # Embedded web UI (compiled into the binary)
+│   └── http_handler.go        # HTTP routes (/ dashboard, /events SSE)
 └── pkg/sbs/
-    ├── message.go       # SBS-1 message types and field definitions
-    ├── aircraft.go      # Aggregated aircraft state struct
-    ├── parser.go        # CSV → Message parser
-    ├── tracker.go       # Thread-safe aircraft state registry & enrichment cache
-    ├── adsbdb.go        # adsbdb.com API client (aircraft & route structs + JSON parsing)
-    ├── client.go        # TCP connection manager with auto-reconnect
-    └── geo.go           # Haversine distance and heading utilities
+    ├── message.go             # SBS-1 message types and field definitions
+    ├── aircraft.go            # Aggregated aircraft state struct
+    ├── parser.go              # CSV → Message parser
+    ├── tracker.go             # Thread-safe aircraft state registry & enrichment cache
+    ├── adsbdb.go              # adsbdb.com API client (aircraft & route structs + JSON parsing)
+    ├── client.go              # TCP connection manager with auto-reconnect
+    └── geo.go                 # Haversine distance and heading utilities
 ```
 
 ## 📻 Setting up an ADS-B receiver

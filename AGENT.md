@@ -25,23 +25,33 @@ The `flights-overhead` project is a Go-based backend designed to connect to loca
 
 ```
 flights-overhead/
-├── AGENT.md               # This onboarding document
-├── dashboard.html         # Embedded web dashboard (SSE-driven live radar UI)
-├── go.mod                 # Go module definition
-├── main.go                # Application orchestrator, CLI entrypoint, HTTP server & SSE broker
+├── AGENT.md                   # This onboarding document
+├── CLAUDE.md                  # Symlink → AGENT.md (used by Claude Code)
+├── go.mod                     # Go module definition
+├── main.go                    # Application orchestrator and CLI entrypoint
+├── broadcast/
+│   ├── broadcaster.go         # FlightsReceiver interface; Broadcast() snapshot fan-out
+│   └── SSEFlightsReceiver.go  # Computes distance/direction, sorts flights, serialises SSE payload
+├── data/
+│   └── data.go                # Shared wire types: FlightJSON, StreamPayload
+├── frontend/
+│   ├── broker.go              # SSEBroker — thread-safe SSE client registry and http.Handler
+│   ├── console.go             # PrintOverheadDashboard() — terminal tabwriter flight table
+│   ├── dashboard.html         # Embedded web dashboard (SSE-driven live radar UI)
+│   └── http_handler.go        # NewHTTPHandler() — registers / and /events routes
 └── pkg/
     └── sbs/
-        ├── adsbdb.go      # adsbdb.com API types and JSON response parsers
-        ├── adsbdb_test.go # Unit tests for adsbdb.com response parsing
-        ├── aircraft.go    # Aggregated state struct for tracked flights (with route/owner fields)
-        ├── client.go      # TCP connection manager with exponential backoff reconnect
-        ├── geo.go         # Haversine distance (NM) and track-to-direction utilities
-        ├── geo_test.go    # Unit tests for geo calculations
-        ├── message.go     # Raw BaseStation Message struct and enums
-        ├── parser.go      # CSV field extractor and time parsing logic
-        ├── parser_test.go # Resiliency unit tests for the parser
-        ├── tracker.go     # Thread-safe flight state registrar, orphan cleaner, adsbdb.com API worker
-        └── tracker_test.go# Unit tests for tracker state consolidation
+        ├── adsbdb.go          # adsbdb.com API types and JSON response parsers
+        ├── adsbdb_test.go     # Unit tests for adsbdb.com response parsing
+        ├── aircraft.go        # Aggregated state struct for tracked flights (with route/owner fields)
+        ├── client.go          # TCP connection manager with exponential backoff reconnect
+        ├── geo.go             # Haversine distance (NM) and track-to-direction utilities
+        ├── geo_test.go        # Unit tests for geo calculations
+        ├── message.go         # Raw BaseStation Message struct and enums
+        ├── parser.go          # CSV field extractor and time parsing logic
+        ├── parser_test.go     # Resiliency unit tests for the parser
+        ├── tracker.go         # Thread-safe flight state registrar, orphan cleaner, adsbdb.com API worker
+        └── tracker_test.go    # Unit tests for tracker state consolidation
 ```
 
 ---
@@ -115,11 +125,19 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
 * **In-Memory Caching**: Results (including "not found") are cached in `aircraftCache` and `routeCache` (`map[string]*cached*`) under a dedicated `cacheMu` mutex, so no hex or callsign is ever fetched twice.
 * **Response Parsing**: `ParseAircraftResponse` and `ParseRouteResponse` in `adsbdb.go` handle the API's unusual envelope where `response` may be either a JSON object or a plain string like `"unknown aircraft"`.
 
-### 6. Web Dashboard & SSE Broker (`main.go`)
-* `dashboard.html` is embedded at compile time via `//go:embed` and served at `/`.
-* The `Broker` type manages a set of connected HTTP clients and pushes JSON payloads over **Server-Sent Events** at `/events` once per second.
-* Each broadcast includes the receiver's coordinates, its TCP address, and a sorted-by-distance list of all active `FlightJSON` records.
-* Flights without known coordinates (lat/lon both `0`) sort to the bottom of the list.
+### 6. Broadcast Layer (`broadcast/`)
+* `Broadcast(receiver, tracker)` in `broadcaster.go` snapshots `tracker.GetAllActive()` and forwards a `[]data.FlightJSON` slice to any `FlightsReceiver` implementation.
+* `SSEFlightsReceiver` in `SSEFlightsReceiver.go` is the concrete SSE implementation: it computes per-flight distance and direction from the receiver coordinates, sorts flights by distance (unknown-position flights sort last by callsign/hex), marshals the result into a `data.StreamPayload` JSON string, and calls `SSEBroker.Broadcast`.
+
+### 7. Shared Data Types (`data/data.go`)
+* `FlightJSON` — wire representation of a tracked aircraft: embeds `sbs.Aircraft` and adds computed `Distance` (NM) and `Direction` fields.
+* `StreamPayload` — top-level SSE envelope: receiver address, lat/lon, and the full `[]FlightJSON` slice.
+
+### 8. Web Frontend (`frontend/`)
+* `SSEBroker` (`broker.go`) manages a set of connected HTTP clients and fans out JSON strings over **Server-Sent Events**. Implements `http.Handler` for the `/events` route.
+* `NewHTTPHandler(broker)` (`http_handler.go`) wires up an explicit `http.ServeMux` with routes for `/` (dashboard) and `/events` (SSE broker). Returns 404 for unknown paths.
+* `dashboard.html` (`dashboard.html`) is embedded at compile time via `//go:embed` and served at `/`.
+* `PrintOverheadDashboard(tracker)` (`console.go`) renders all active aircraft as a formatted `tabwriter` table to stdout.
 
 ---
 
