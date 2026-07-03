@@ -25,10 +25,11 @@ func TestFirestoreFlightsReceiver_StateTracking(t *testing.T) {
 	}
 	defer client.Close()
 
-	// Use an already-cancelled context for the receiver so Firestore operations
-	// (Delete, Set) fail instantly with context.Canceled without blocking the test.
-	recvCtx, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
-	cancel() // Cancel immediately
+	// Use a context with a generous timeout. With FIRESTORE_EMULATOR_HOST pointing at a
+	// non-running server, all Firestore calls fail immediately with "connection refused",
+	// so the worker completes each batch in milliseconds.
+	recvCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
 
 	receiver := NewFirestoreFlightsReceiver(recvCtx, client)
 
@@ -58,7 +59,10 @@ func TestFirestoreFlightsReceiver_StateTracking(t *testing.T) {
 		},
 	}
 
-	receiver.Send(flights1)
+	// Call process() directly — it's the internal method under test.
+	// Send() is the async dispatcher; calling process() synchronously avoids
+	// relying on timing of the background worker goroutine.
+	receiver.process(flights1)
 
 	// Verify both are added to lastSeen
 	if !receiver.lastSeen["4601F6"] || !receiver.lastSeen["300001"] {
@@ -83,7 +87,7 @@ func TestFirestoreFlightsReceiver_StateTracking(t *testing.T) {
 		},
 	}
 
-	receiver.Send(flights2)
+	receiver.process(flights2)
 
 	// Verify only FIN123 remains in lastSeen
 	if !receiver.lastSeen["4601F6"] {

@@ -3,7 +3,6 @@ package broadcast
 import (
 	"context"
 	"flights-overhead/data"
-	"flights-overhead/pkg/sbs"
 	"log/slog"
 	"reflect"
 
@@ -14,22 +13,51 @@ import (
 type FirestoreFlightsReceiver struct {
 	client   *firestore.Client
 	ctx      context.Context
+	ch       chan []data.FlightJSON
 	lastSeen map[string]bool
 	prevData map[string]map[string]interface{}
 }
 
-// NewFirestoreFlightsReceiver creates a new FirestoreFlightsReceiver.
+// NewFirestoreFlightsReceiver creates a new FirestoreFlightsReceiver and starts its background worker.
 func NewFirestoreFlightsReceiver(ctx context.Context, client *firestore.Client) *FirestoreFlightsReceiver {
-	return &FirestoreFlightsReceiver{
+	r := &FirestoreFlightsReceiver{
 		client:   client,
 		ctx:      ctx,
+		ch:       make(chan []data.FlightJSON, 1),
 		lastSeen: make(map[string]bool),
 		prevData: make(map[string]map[string]interface{}),
 	}
+	go r.worker()
+	return r
 }
 
-// Send updates active flights in Firestore and deletes stale ones.
+// Send enqueues a flight snapshot for the background worker to write to Firestore.
+// It is non-blocking: if the worker is still processing the previous snapshot, the
+// stale entry is replaced so the worker always processes the most recent state.
 func (r *FirestoreFlightsReceiver) Send(flights []data.FlightJSON) {
+	// Drain any pending snapshot that hasn't been processed yet.
+	select {
+	case <-r.ch:
+	default:
+	}
+	r.ch <- flights
+}
+
+// worker runs in its own goroutine and processes Firestore writes sequentially.
+func (r *FirestoreFlightsReceiver) worker() {
+	for {
+		select {
+		case <-r.ctx.Done():
+			return
+		case flights := <-r.ch:
+			r.process(flights)
+		}
+	}
+}
+
+// process writes the flight snapshot to Firestore, deleting stale documents and
+// updating changed ones. It is only ever called from the worker goroutine.
+func (r *FirestoreFlightsReceiver) process(flights []data.FlightJSON) {
 	currentActive := make(map[string]bool)
 	for _, f := range flights {
 		currentActive[f.Aircraft.HexIdent] = true
@@ -71,11 +99,6 @@ func (r *FirestoreFlightsReceiver) Send(flights []data.FlightJSON) {
 	for _, f := range flights {
 		docRef := r.client.Collection("active_flights").Doc(f.Aircraft.HexIdent)
 
-		var direction string
-		if f.Aircraft.HasTrack {
-			direction = sbs.TrackToDirection(f.Aircraft.Track)
-		}
-
 		// Create a map representation of the flight data to upload
 		dataMap := map[string]interface{}{
 			"hex":             f.Aircraft.HexIdent,
@@ -84,13 +107,6 @@ func (r *FirestoreFlightsReceiver) Send(flights []data.FlightJSON) {
 			"longitude":       f.Aircraft.Longitude,
 			"altitude":        f.Aircraft.Altitude,
 			"speed":           f.Aircraft.GroundSpeed,
-			"track":           f.Aircraft.Track,
-			"direction":       direction,
-			"hasPosition":     f.Aircraft.HasPosition,
-			"hasTrack":        f.Aircraft.HasTrack,
-			"verticalRate":    f.Aircraft.VerticalRate,
-			"squawk":          f.Aircraft.Squawk,
-			"isOnGround":      f.Aircraft.IsOnGround,
 			"manufacturer":    f.Aircraft.Manufacturer,
 			"model":           f.Aircraft.Model,
 			"registration":    f.Aircraft.Registration,
@@ -105,19 +121,16 @@ func (r *FirestoreFlightsReceiver) Send(flights []data.FlightJSON) {
 			"destIATA":        f.Aircraft.DestIATA,
 			"destName":        f.Aircraft.DestName,
 			"destCity":        f.Aircraft.DestCity,
-			"lastSeen":        f.Aircraft.LastSeen,
 		}
 
 		// Only write if data has changed
 		if prev, ok := r.prevData[f.Aircraft.HexIdent]; ok && reflect.DeepEqual(prev, dataMap) {
-			// No changes, skip Firestore update
 			continue
 		}
 		_, err := docRef.Set(r.ctx, dataMap)
 		if err != nil {
 			slog.Error("failed to write active flight to Firestore", "hex", f.Aircraft.HexIdent, "error", err)
 		} else {
-			// Store current snapshot for future comparison
 			r.prevData[f.Aircraft.HexIdent] = dataMap
 		}
 	}

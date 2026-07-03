@@ -329,7 +329,7 @@ func (t *Tracker) fetchAircraftDetails(hex string) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		slog.Debug("aircraft not found on adsbdb.com API", "hex", hex)
+		slog.Info("aircraft not found in adsbdb.com (no enrichment available)", "hex", hex)
 		t.cacheMu.Lock()
 		t.aircraftCache[hex] = &cachedAircraft{notFound: true}
 		t.cacheMu.Unlock()
@@ -381,6 +381,7 @@ func (t *Tracker) fetchAircraftDetails(hex string) {
 			ac.Operator = acData.RegisteredOwner
 		}
 		t.mu.Unlock()
+		slog.Info("aircraft enrichment applied", "hex", hex, "manufacturer", acData.Manufacturer, "model", acData.Type, "registration", acData.Registration)
 	}
 }
 
@@ -399,7 +400,7 @@ func (t *Tracker) fetchRouteDetails(hex string, callsign string) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		slog.Debug("route not found on adsbdb.com API", "callsign", callsign)
+		slog.Info("route not found in adsbdb.com (no route available)", "callsign", callsign)
 		t.cacheMu.Lock()
 		t.routeCache[callsign] = &cachedRoute{notFound: true}
 		t.cacheMu.Unlock()
@@ -442,6 +443,7 @@ func (t *Tracker) fetchRouteDetails(hex string, callsign string) {
 
 	if routeData != nil && routeData.FlightRoute != nil {
 		fr := routeData.FlightRoute
+		var origin, dest string
 		t.mu.Lock()
 		if ac, exists := t.byHex[hex]; exists {
 			if fr.Origin != nil {
@@ -449,14 +451,17 @@ func (t *Tracker) fetchRouteDetails(hex string, callsign string) {
 				ac.OriginIATA = fr.Origin.IATACode
 				ac.OriginName = fr.Origin.Name
 				ac.OriginCity = fr.Origin.Municipality
+				origin = fr.Origin.Municipality
 			}
 			if fr.Destination != nil {
 				ac.DestICAO = fr.Destination.ICAOCode
 				ac.DestIATA = fr.Destination.IATACode
 				ac.DestName = fr.Destination.Name
 				ac.DestCity = fr.Destination.Municipality
+				dest = fr.Destination.Municipality
 			}
 		}
 		t.mu.Unlock()
+		slog.Info("route enrichment applied", "callsign", callsign, "origin", origin, "dest", dest)
 	}
 }
