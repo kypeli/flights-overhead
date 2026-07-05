@@ -2,5 +2,4 @@
 service-account-key.json
 skills-lock.json
 .DS_Store
-./flights-overhead-pi
-./flights-overhead
+bin/*

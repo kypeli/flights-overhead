@@ -4,12 +4,12 @@ tasks:
   build:
     desc: Build the flights-overhead server binary
     cmds:
-      - go build -o flights-overhead main.go
+      - go build -o bin/flights-overhead main.go
 
   build-pi:
     desc: Build the flights-overhead server binary for Raspberry Pi (Linux/arm64)
     cmds:
-      - GOOS=linux GOARCH=arm64 go build -o flights-overhead-pi main.go
+      - GOOS=linux GOARCH=arm64 go build -o bin/flights-overhead-pi main.go
 
   deploy-pi:
     desc: Build and deploy the binary to Raspberry Pi via scp
@@ -19,7 +19,7 @@ tasks:
       PI_USER: '{{.PI_USER | default "pi"}}'
       PI_PATH: '{{.PI_PATH | default "~/flights-overhead"}}'
     cmds:
-      - scp flights-overhead-pi {{.PI_USER}}@{{.PI_HOST}}:{{.PI_PATH}}
+      - scp bin/flights-overhead-pi {{.PI_USER}}@{{.PI_HOST}}:{{.PI_PATH}}
 
   run:
     desc: Build and start the server with coordinates and firestore credentials
@@ -39,4 +39,4 @@ tasks:
       - sh: 'test -n "{{.LON}}"'
         msg: "Error: LON parameter is required. Run as: task run TRACKER=<tracker> LAT=<latitude> LON=<longitude> [PROJECT=<project_id>] [CREDENTIALS=<credentials_path>] [args...]"
     cmds:
-      - ./flights-overhead -tracker-addr="{{.TRACKER}}:30003" -http="{{.WEBSERVER}}" -lat="{{.LAT}}" -lon="{{.LON}}" -firestore-project="{{.PROJECT}}" -firestore-credentials="{{.CREDENTIALS}}" {{.CLI_ARGS}}
+      - ./bin/flights-overhead -tracker-addr="{{.TRACKER}}:30003" -http="{{.WEBSERVER}}" -lat="{{.LAT}}" -lon="{{.LON}}" -firestore-project="{{.PROJECT}}" -firestore-credentials="{{.CREDENTIALS}}" {{.CLI_ARGS}}
