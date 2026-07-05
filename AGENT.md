@@ -10,8 +10,10 @@ The `flights-overhead` project is a Go-based backend designed to connect to loca
 ---
 
 ## ⚙️ Technology Stack
-* **Language**: Go 1.26.3
-* **Dependencies**: Zero Go module dependencies. Uses the standard library exclusively:
+* **Language**: Go 1.26.3 (tested with local toolchain 1.26.4)
+* **Dependencies**: Uses standard library packages along with Cloud Firestore integrations:
+  * `cloud.google.com/go/firestore` for Firebase real-time document synchronization.
+  * `google.golang.org/api/option` for credential/JSON file option management.
   * `log/slog` for structured logging.
   * `bufio.Scanner` for optimized line-by-line TCP socket reading.
   * `sync.RWMutex` for thread-safe concurrent registry maps.
@@ -27,11 +29,18 @@ The `flights-overhead` project is a Go-based backend designed to connect to loca
 flights-overhead/
 ├── AGENT.md                   # This onboarding document
 ├── CLAUDE.md                  # Symlink → AGENT.md (used by Claude Code)
+├── Taskfile.yml               # Task runner automation (predefined build/run commands)
+├── firebase.json              # Firebase/Firestore project setup configuration
+├── firestore.rules            # Firestore security rules
+├── firestore.indexes.json     # Firestore index definitions
+├── flights-overhead.service   # Systemd service unit for Raspbian deployment
 ├── go.mod                     # Go module definition
 ├── main.go                    # Application orchestrator and CLI entrypoint
 ├── broadcast/
 │   ├── broadcaster.go         # FlightsReceiver interface; Broadcast() snapshot fan-out
-│   └── SSEFlightsReceiver.go  # Computes distance/direction, sorts flights, serialises SSE payload
+│   ├── SSEFlightsReceiver.go  # Computes distance/direction, sorts flights, serialises SSE payload
+│   ├── firestore.go           # FirestoreFlightsReceiver (syncs active flight snapshots to Firestore)
+│   └── firestore_test.go      # Unit tests for the Firestore snapshot receiver
 ├── data/
 │   └── data.go                # Shared wire types: FlightJSON, StreamPayload
 ├── frontend/
@@ -39,6 +48,8 @@ flights-overhead/
 │   ├── console.go             # PrintOverheadDashboard() — terminal tabwriter flight table
 │   ├── dashboard.html         # Embedded web dashboard (SSE-driven live radar UI)
 │   └── http_handler.go        # NewHTTPHandler() — registers / and /events routes
+├── sbsfirestore/
+│   └── firestore.go           # Firestore client initialization and connection wrapper
 └── pkg/
     └── sbs/
         ├── adsbdb.go          # adsbdb.com API types and JSON response parsers
@@ -139,6 +150,14 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
 * `dashboard.html` (`dashboard.html`) is embedded at compile time via `//go:embed` and served at `/`.
 * `PrintOverheadDashboard(tracker)` (`console.go`) renders all active aircraft as a formatted `tabwriter` table to stdout.
 
+### 9. Cloud Firestore Sync Component (`sbsfirestore/` & `broadcast/firestore.go`)
+* **Client Initializer**: `NewFirestoreClient(ctx, config)` initializes the connection to Cloud Firestore using provided credentials JSON files and project IDs.
+* **Sync Receiver**: `FirestoreFlightsReceiver` implements `FlightsReceiver` and processes flight snapshots on a 1-second interval:
+  * Uses a buffered channel `ch` of capacity 1. It operates in a non-blocking manner: if a write is in progress, the channel is drained first to keep only the newest snapshot.
+  * Compares current snapshot data against a cached in-memory snapshot (`prevData`) using `reflect.DeepEqual` to filter out flights whose fields have not changed, reducing database write volume.
+  * Automatically identifies and deletes inactive flights (those evicted by the tracker) from the `active_flights` Firestore collection.
+  * Runs writes sequentially inside a background goroutine loop (`worker()`) to avoid holding up the main application event loops.
+
 ---
 
 ## 🛠️ Operational Commands
@@ -149,8 +168,22 @@ go test -v ./...
 ```
 
 ### Start the Application (connecting to an ADS-B receiver)
+
+Using `task` automation:
 ```bash
-go run main.go -tracker-addr "localhost:30003" -expire 60s -report 5s -lat <lat> -lon <lon>
+task run TRACKER=<tracker_ip> LAT=<latitude> LON=<longitude> PROJECT=<project_id> CREDENTIALS=<credentials_path>
+```
+
+Or using `go run` directly:
+```bash
+go run main.go \
+  -tracker-addr "localhost:30003" \
+  -expire 60s \
+  -report 5s \
+  -lat <lat> \
+  -lon <lon> \
+  -firestore-project <project-id> \
+  -firestore-credentials <credentials-path>
 ```
 
 | Flag | Default | Description |
@@ -162,6 +195,8 @@ go run main.go -tracker-addr "localhost:30003" -expire 60s -report 5s -lat <lat>
 | `-lat` | *(required)* | Receiver latitude (used for distance calculations). |
 | `-lon` | *(required)* | Receiver longitude (used for distance calculations). |
 | `-debug` | `false` | Enables verbose per-line parser logging. |
+| `-firestore-project` | *(required)* | Firebase Project ID for Firestore integration. |
+| `-firestore-credentials` | *(required)* | Path to the service account credentials JSON key file. |
 
 ---
 

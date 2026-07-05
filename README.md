@@ -17,20 +17,35 @@ Connect it to an ADS-B receiver (like a RTL-SDR dongle running `dump1090`) and i
 
 ## 📦 Requirements
 
-- Go 1.21+
+- Go 1.26+
 - An ADS-B receiver with `dump1090` (or equivalent) running and exposing a BaseStation TCP stream, typically on port `30003`
+- A Firebase / Cloud Firestore project with service account credentials configured.
 
-No external Go dependencies — standard library only. Aircraft and route data is fetched live from [adsbdb.com](https://www.adsbdb.com/); an internet connection is required for those enrichments but not for core tracking.
+Uses standard library components combined with the Cloud Firestore Go SDK to synchronize live flight snapshots to Firestore. Aircraft and route data is fetched live from [adsbdb.com](https://www.adsbdb.com/); an internet connection is required for those enrichments but not for core tracking.
 
 ## 🚀 Quick start
+
+Using `task` (Taskfile.yml):
 
 ```bash
 git clone https://github.com/yourname/flights-overhead
 cd flights-overhead
-go run main.go -tracker-addr "localhost:30003"
+# Start the application with your receiver IP, coordinates, and Firestore parameters
+task run TRACKER=<tracker_ip> LAT=<latitude> LON=<longitude> PROJECT=<firestore_project_id> CREDENTIALS=<credentials_json_path>
 ```
 
-Then open `http://localhost:8080` in your browser.
+Or using `go run` directly:
+
+```bash
+go run main.go \
+  -tracker-addr "<tracker_ip>:30003" \
+  -lat <latitude> \
+  -lon <longitude> \
+  -firestore-project <firestore_project_id> \
+  -firestore-credentials <credentials_json_path>
+```
+
+Then open `http://localhost:8080` in your browser to view the local dashboard, or inspect your Firestore database under the `active_flights` collection.
 
 ## ⚙️ Configuration
 
@@ -43,15 +58,19 @@ Then open `http://localhost:8080` in your browser.
 | `-expire` | `60s` | How long before a silent aircraft is dropped from state |
 | `-report` | `5s` | How often to print the terminal flight table |
 | `-debug` | `false` | Verbose per-line parser logging |
+| `-firestore-project` | *(required)* | Firebase Project ID for Firestore integration |
+| `-firestore-credentials` | *(required)* | Path to the service account credentials JSON key file |
 
-Example with custom receiver location:
+Example with custom receiver location and Firestore:
 
 ```bash
 go run main.go \
   -tracker-addr "<IP address of the ADS-B receiver>:30003" \
   -lat <latitude of ADS-B receiver> \
   -lon <longitude of ADS-B receiver> \
-  -expire 90s
+  -expire 90s \
+  -firestore-project "my-firebase-project" \
+  -firestore-credentials "service-account-key.json"
 ```
 
 ## 🖥️ Dashboard
@@ -78,8 +97,11 @@ RTL-SDR dongle
       ├── pkg/sbs/parser     CSV line → typed Message struct
       ├── pkg/sbs/tracker    incremental state aggregation per ICAO hex ID
       ├── pkg/sbs/adsbdb     live aircraft & route lookups (adsbdb.com API)
-      ├── broadcast          fan-out flight snapshots to receivers
-      ├── frontend/broker    Server-Sent Events fan-out to browser clients
+      ├── broadcast          snapshot fan-out to FlightsReceiver implementations:
+      │     ├── SSE           broadcasts to SSEBroker -> web clients
+      │     └── Firestore     syncs active flights collection in Cloud Firestore
+      ├── sbsfirestore       manages Firestore client connection
+      ├── frontend/broker    Server-Sent Events broker
       └── frontend/dashboard embedded HTML/JS served at :8080
 ```
 
@@ -107,9 +129,16 @@ go test -v ./...
 ```
 flights-overhead/
 ├── main.go                    # CLI entrypoint and event loop
+├── Taskfile.yml               # Task automation runner configuration
+├── firebase.json              # Firebase project configuration
+├── firestore.rules            # Firestore security rules
+├── firestore.indexes.json     # Firestore index definitions
+├── flights-overhead.service   # Systemd service unit configuration file
 ├── broadcast/
 │   ├── broadcaster.go         # FlightsReceiver interface and snapshot fan-out
-│   └── SSEFlightsReceiver.go  # Distance/sort enrichment, SSE payload serialiser
+│   ├── SSEFlightsReceiver.go  # Distance/sort enrichment, SSE payload serialiser
+│   ├── firestore.go           # FirestoreFlightsReceiver (syncs snapshots to collection)
+│   └── firestore_test.go      # Tests for the Firestore synchronization receiver
 ├── data/
 │   └── data.go                # Shared types: FlightJSON, StreamPayload
 ├── frontend/
@@ -117,6 +146,8 @@ flights-overhead/
 │   ├── console.go             # Terminal flight table printer
 │   ├── dashboard.html         # Embedded web UI (compiled into the binary)
 │   └── http_handler.go        # HTTP routes (/ dashboard, /events SSE)
+├── sbsfirestore/
+│   └── firestore.go           # Cloud Firestore client initialization and wrapper
 └── pkg/sbs/
     ├── message.go             # SBS-1 message types and field definitions
     ├── aircraft.go            # Aggregated aircraft state struct
