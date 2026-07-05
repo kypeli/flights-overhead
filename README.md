@@ -134,6 +134,16 @@ flights-overhead/
 ├── firestore.rules            # Firestore security rules
 ├── firestore.indexes.json     # Firestore index definitions
 ├── flights-overhead.service   # Systemd service unit configuration file
+├── functions/                 # Firebase Cloud Functions (TypeScript)
+│   ├── package.json           # Node.js dependencies and lifecycle scripts
+│   ├── tsconfig.json          # TypeScript compilation configuration
+│   └── src/
+│       ├── index.ts           # Functions entrypoint & triggers
+│       ├── firebase.ts        # Admin SDK initialization & options
+│       ├── http.ts            # Authenticated POST wrapper with CORS & ID Token verification
+│       ├── token.ts           # FCM token registration endpoint
+│       ├── validation.ts      # Device ID validation helper
+│       └── push-notification.ts # Future push-notification scaffold
 ├── broadcast/
 │   ├── broadcaster.go         # FlightsReceiver interface and snapshot fan-out
 │   ├── SSEFlightsReceiver.go  # Distance/sort enrichment, SSE payload serialiser
@@ -156,6 +166,32 @@ flights-overhead/
     ├── adsbdb.go              # adsbdb.com API client (aircraft & route structs + JSON parsing)
     ├── client.go              # TCP connection manager with auto-reconnect
     └── geo.go                 # Haversine distance and heading utilities
+```
+
+## 🔥 Firebase Cloud Functions
+
+The repository contains Firebase Cloud Functions (v2 API) written in TypeScript to support client push notifications.
+
+### Available Endpoints
+* **`token` (Authenticated POST)**: Registers/updates client FCM (Firebase Cloud Messaging) tokens in the `fcm_tokens` Firestore collection. Accepts `token`, optional `deviceId`, and optional `platform` (`android`, `ios`, `web`).
+* **`pushNotification` (Authenticated POST)**: Scaffold for future push-notification logic (currently returns `501 Not Implemented`).
+
+All endpoints enforce SSL, CORS preflight, `POST` requests, and require a valid Firebase ID Token passed as a Bearer token in the `Authorization` header.
+
+### Local Development (Emulators)
+To compile TypeScript and start the local Firebase emulator for Functions:
+```bash
+npm run --prefix functions serve
+```
+
+### Deployment
+To build (lint and compile TypeScript) and deploy the functions to your production Firebase project:
+```bash
+# Using Taskfile
+task deploy-functions
+
+# Or using Firebase CLI directly
+firebase deploy --only functions
 ```
 
 ## 📻 Setting up an ADS-B receiver
