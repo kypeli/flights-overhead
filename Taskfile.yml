@@ -3,16 +3,19 @@ version: '3'
 tasks:
   build:
     desc: Build the flights-overhead server binary
+    dir: backend
     cmds:
       - go build -o bin/flights-overhead main.go
 
   build-pi:
     desc: Build the flights-overhead server binary for Raspberry Pi (Linux/arm64)
+    dir: backend
     cmds:
       - GOOS=linux GOARCH=arm64 go build -o bin/flights-overhead-pi main.go
 
   deploy-pi:
     desc: Build and deploy the binary to Raspberry Pi via scp
+    dir: backend
     deps: [build-pi]
     vars:
       PI_HOST: '{{.PI_HOST | default "pi24-bookworm.local"}}'
@@ -23,13 +26,14 @@ tasks:
 
   run:
     desc: Build and start the server with coordinates and firestore credentials
+    dir: backend
     deps: [build]
     vars:
       LAT: '{{.LAT}}'
       LON: '{{.LON}}'
       TRACKER: '{{.TRACKER}}'
       PROJECT: '{{.PROJECT | default "flights-overhead"}}'
-      CREDENTIALS: '{{.CREDENTIALS | default "service-account-key.json"}}'
+      CREDENTIALS: '{{.CREDENTIALS | default "../service-account-key.json"}}'
       WEBSERVER: '{{.WEBSERVER | default "localhost:8080"}}'
     preconditions:
       - sh: 'test -n "{{.TRACKER}}"'
@@ -43,6 +47,7 @@ tasks:
 
   deploy-functions:
     desc: Build and deploy Firebase Cloud Functions to production
+    dir: cloud-functions
     cmds:
       - npx -y firebase-tools@latest deploy --only functions
 

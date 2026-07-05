@@ -26,54 +26,63 @@ The `flights-overhead` project is a Go-based backend designed to connect to loca
 
 ## 📁 Repository Directory Structure
 
+The repository is split into two independent subprojects: **`backend/`** (the Go ADS-B
+tracker, a self-contained Go module) and **`cloud-functions/`** (the Firebase project and
+TypeScript Cloud Functions). The `Taskfile.yml` at the repo root drives both — each task
+declares a `dir:` so it runs inside the correct subproject.
+
 ```
 flights-overhead/
-├── AGENT.md                   # This onboarding document
-├── CLAUDE.md                  # Symlink → AGENT.md (used by Claude Code)
-├── Taskfile.yml               # Task runner automation (predefined build/run commands)
-├── firebase.json              # Firebase/Firestore project setup configuration
-├── firestore.rules            # Firestore security rules
-├── firestore.indexes.json     # Firestore index definitions
-├── flights-overhead.service   # Systemd service unit for Raspbian deployment
-├── go.mod                     # Go module definition
-├── main.go                    # Application orchestrator and CLI entrypoint
-├── broadcast/
-│   ├── broadcaster.go         # FlightsReceiver interface; Broadcast() snapshot fan-out
-│   ├── SSEFlightsReceiver.go  # Computes distance/direction, sorts flights, serialises SSE payload
-│   ├── firestore.go           # FirestoreFlightsReceiver (syncs active flight snapshots to Firestore)
-│   └── firestore_test.go      # Unit tests for the Firestore snapshot receiver
-├── data/
-│   └── data.go                # Shared wire types: FlightJSON, StreamPayload
-├── frontend/
-│   ├── broker.go              # SSEBroker — thread-safe SSE client registry and http.Handler
-│   ├── console.go             # PrintOverheadDashboard() — terminal tabwriter flight table
-│   ├── dashboard.html         # Embedded web dashboard (SSE-driven live radar UI)
-│   └── http_handler.go        # NewHTTPHandler() — registers / and /events routes
-├── functions/                 # Firebase Cloud Functions (TypeScript)
-│   ├── package.json           # Node.js dependencies and lifecycle scripts
-│   ├── tsconfig.json          # TypeScript compilation configuration
-│   └── src/
-│       ├── index.ts           # Functions entrypoint and triggers
-│       ├── firebase.ts        # Admin SDK initialization & config (maxInstances: 10)
-│       ├── http.ts            # Authenticated post helper (CORS, POST enforce, ID token verify)
-│       ├── token.ts           # FCM token registration endpoint
-│       ├── validation.ts      # Client deviceId & platform validation rules
-│       └── push-notification.ts # Scaffold for future push notification triggers
-├── sbsfirestore/
-│   └── firestore.go           # Firestore client initialization and connection wrapper
-└── pkg/
-    └── sbs/
-        ├── adsbdb.go          # adsbdb.com API types and JSON response parsers
-        ├── adsbdb_test.go     # Unit tests for adsbdb.com response parsing
-        ├── aircraft.go        # Aggregated state struct for tracked flights (with route/owner fields)
-        ├── client.go          # TCP connection manager with exponential backoff reconnect
-        ├── geo.go             # Haversine distance (NM) and track-to-direction utilities
-        ├── geo_test.go        # Unit tests for geo calculations
-        ├── message.go         # Raw BaseStation Message struct and enums
-        ├── parser.go          # CSV field extractor and time parsing logic
-        ├── parser_test.go     # Resiliency unit tests for the parser
-        ├── tracker.go         # Thread-safe flight state registrar, orphan cleaner, adsbdb.com API worker
-        └── tracker_test.go    # Unit tests for tracker state consolidation
+├── AGENT.md                       # This onboarding document
+├── CLAUDE.md                      # Symlink → AGENT.md (used by Claude Code)
+├── Taskfile.yml                   # Task runner automation (build/run in backend, deploy in cloud-functions)
+├── service-account-key.json       # Firestore service account key (gitignored, repo root)
+├── backend/                       # Go ADS-B tracker (module: flights-overhead)
+│   ├── go.mod                     # Go module definition
+│   ├── main.go                    # Application orchestrator and CLI entrypoint
+│   ├── broadcast/
+│   │   ├── broadcaster.go         # FlightsReceiver interface; Broadcast() snapshot fan-out
+│   │   ├── SSEFlightsReceiver.go  # Computes distance/direction, sorts flights, serialises SSE payload
+│   │   ├── firestore.go           # FirestoreFlightsReceiver (syncs active flight snapshots to Firestore)
+│   │   └── firestore_test.go      # Unit tests for the Firestore snapshot receiver
+│   ├── data/
+│   │   └── data.go                # Shared wire types: FlightJSON, StreamPayload
+│   ├── frontend/
+│   │   ├── broker.go              # SSEBroker — thread-safe SSE client registry and http.Handler
+│   │   ├── console.go             # PrintOverheadDashboard() — terminal tabwriter flight table
+│   │   ├── dashboard.html         # Embedded web dashboard (SSE-driven live radar UI)
+│   │   └── http_handler.go        # NewHTTPHandler() — registers / and /events routes
+│   ├── sbsfirestore/
+│   │   └── firestore.go           # Firestore client initialization and connection wrapper
+│   └── pkg/
+│       └── sbs/
+│           ├── adsbdb.go          # adsbdb.com API types and JSON response parsers
+│           ├── adsbdb_test.go     # Unit tests for adsbdb.com response parsing
+│           ├── aircraft.go        # Aggregated state struct for tracked flights (with route/owner fields)
+│           ├── client.go          # TCP connection manager with exponential backoff reconnect
+│           ├── geo.go             # Haversine distance (NM) and track-to-direction utilities
+│           ├── geo_test.go        # Unit tests for geo calculations
+│           ├── message.go         # Raw BaseStation Message struct and enums
+│           ├── parser.go          # CSV field extractor and time parsing logic
+│           ├── parser_test.go     # Resiliency unit tests for the parser
+│           ├── tracker.go         # Thread-safe flight state registrar, orphan cleaner, adsbdb.com API worker
+│           └── tracker_test.go    # Unit tests for tracker state consolidation
+└── cloud-functions/               # Firebase project (deploy from this directory)
+    ├── firebase.json              # Firebase/Firestore project setup configuration
+    ├── .firebaserc                # Firebase project alias (default: flights-overhead)
+    ├── firestore.rules            # Firestore security rules
+    ├── firestore.indexes.json     # Firestore index definitions
+    ├── flights-overhead.service   # Systemd service unit for Raspbian deployment
+    └── functions/                 # Firebase Cloud Functions (TypeScript)
+        ├── package.json           # Node.js dependencies and lifecycle scripts
+        ├── tsconfig.json          # TypeScript compilation configuration
+        └── src/
+            ├── index.ts           # Functions entrypoint and triggers
+            ├── firebase.ts        # Admin SDK initialization & config (maxInstances: 10)
+            ├── http.ts            # Authenticated post helper (CORS, POST enforce, ID token verify)
+            ├── token.ts           # FCM token registration endpoint
+            ├── validation.ts      # Client deviceId & platform validation rules
+            └── push-notification.ts # Scaffold for future push notification triggers
 ```
 
 ---
@@ -169,14 +178,15 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
   * Automatically identifies and deletes inactive flights (those evicted by the tracker) from the `active_flights` Firestore collection.
   * Runs writes sequentially inside a background goroutine loop (`worker()`) to avoid holding up the main application event loops.
 
-### 10. Firebase Cloud Functions (`functions/`)
+### 10. Firebase Cloud Functions (`cloud-functions/functions/`)
 * Written in TypeScript, compiled to Node.js 22, using Firebase Functions v2 API.
-* Main entry point is [functions/src/index.ts](file:///Users/kypeli/src/own/flights-overhead/functions/src/index.ts). Global configuration (such as cost-control limits like `maxInstances: 10`) is initialized in [functions/src/firebase.ts](file:///Users/kypeli/src/own/flights-overhead/functions/src/firebase.ts) via `setGlobalOptions`.
-* Built and validated prior to deployment using the predeploy hooks configured in [firebase.json](file:///Users/kypeli/src/own/flights-overhead/firebase.json) (`npm run lint` and `npm run build`).
+* Lives under `cloud-functions/`, alongside the Firebase project config (`firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json`). All `firebase` CLI commands must be run from the `cloud-functions/` directory.
+* Main entry point is [cloud-functions/functions/src/index.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/index.ts). Global configuration (such as cost-control limits like `maxInstances: 10`) is initialized in [cloud-functions/functions/src/firebase.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/firebase.ts) via `setGlobalOptions`.
+* Built and validated prior to deployment using the predeploy hooks configured in [cloud-functions/firebase.json](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/firebase.json) (`npm run lint` and `npm run build`).
 * **Endpoints**:
-  * **`token`** ([functions/src/token.ts](file:///Users/kypeli/src/own/flights-overhead/functions/src/token.ts)): Registers/updates client FCM (Firebase Cloud Messaging) tokens in the `fcm_tokens` Firestore collection. Merges documents based on client-provided `deviceId` or raw `token`, setting fields like `platform` ("android", "ios", "web"), `uid`, and `updatedAt`.
-  * **`pushNotification`** ([functions/src/push-notification.ts](file:///Users/kypeli/src/own/flights-overhead/functions/src/push-notification.ts)): Pre-configured endpoint scaffold for future push-notification features (currently returns HTTP 501 Not Implemented).
-  * Both handlers are wrapped by `onAuthenticatedPost` ([functions/src/http.ts](file:///Users/kypeli/src/own/flights-overhead/functions/src/http.ts)), enforcing CORS preflight, `POST` requests, and verifying the Firebase ID Token in the `Authorization` header.
+  * **`token`** ([cloud-functions/functions/src/token.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/token.ts)): Registers/updates client FCM (Firebase Cloud Messaging) tokens in the `fcm_tokens` Firestore collection. Merges documents based on client-provided `deviceId` or raw `token`, setting fields like `platform` ("android", "ios", "web"), `uid`, and `updatedAt`.
+  * **`pushNotification`** ([cloud-functions/functions/src/push-notification.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/push-notification.ts)): Pre-configured endpoint scaffold for future push-notification features (currently returns HTTP 501 Not Implemented).
+  * Both handlers are wrapped by `onAuthenticatedPost` ([cloud-functions/functions/src/http.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/http.ts)), enforcing CORS preflight, `POST` requests, and verifying the Firebase ID Token in the `Authorization` header.
 
 ---
 
@@ -184,18 +194,20 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
 
 ### Run Automated Tests
 ```bash
+cd backend
 go test -v ./...
 ```
 
 ### Start the Application (connecting to an ADS-B receiver)
 
-Using `task` automation:
+Using `task` automation (run from the repo root — the `run` task builds and runs inside `backend/`):
 ```bash
 task run TRACKER=<tracker_ip> LAT=<latitude> LON=<longitude> PROJECT=<project_id> CREDENTIALS=<credentials_path>
 ```
 
-Or using `go run` directly:
+Or using `go run` directly (from the `backend/` directory):
 ```bash
+cd backend
 go run main.go \
   -tracker-addr "localhost:30003" \
   -expire 60s \
@@ -220,16 +232,18 @@ go run main.go \
 
 ### Firebase Functions Commands
 
-Manage, build, and deploy the functions:
+Manage, build, and deploy the functions. The functions package lives at
+`cloud-functions/functions/`, and the `firebase` CLI must be run from `cloud-functions/`
+(where `firebase.json` and `.firebaserc` live):
 
 | Command | Action |
 |---|---|
-| `npm run --prefix functions lint` | Lint Firebase Functions source files. |
-| `npm run --prefix functions build` | Compile TypeScript functions code to JavaScript. |
-| `npm run --prefix functions serve` | Compile and start the local Firebase emulator for Functions. |
-| `npm run --prefix functions deploy` | Deploy Cloud Functions to Firebase. |
-| `firebase deploy --only functions` | Alternative command to deploy only the functions component. |
-| `task deploy-functions` | Built-in Taskfile command to build and deploy functions. |
+| `npm run --prefix cloud-functions/functions lint` | Lint Firebase Functions source files. |
+| `npm run --prefix cloud-functions/functions build` | Compile TypeScript functions code to JavaScript. |
+| `npm run --prefix cloud-functions/functions serve` | Compile and start the local Firebase emulator for Functions. |
+| `npm run --prefix cloud-functions/functions deploy` | Deploy Cloud Functions to Firebase. |
+| `cd cloud-functions && firebase deploy --only functions` | Alternative command to deploy only the functions component. |
+| `task deploy-functions` | Built-in Taskfile command (from repo root) that deploys from `cloud-functions/`. |
 
 
 ---

@@ -2,7 +2,7 @@
 service-account-key.json
 skills-lock.json
 .DS_Store
-bin/*
+backend/bin/*
 
 # Log files
 *.log

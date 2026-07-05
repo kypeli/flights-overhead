@@ -3,6 +3,6 @@
     "source.fixAll.eslint": "explicit"
   },
   "eslint.workingDirectories": [
-    "./functions"
+    "./cloud-functions/functions"
   ]
 }
