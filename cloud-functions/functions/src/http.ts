@@ -1,7 +1,7 @@
-import {onRequest, Request, HttpsFunction} from "firebase-functions/v2/https";
+import { onRequest, Request, HttpsFunction } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
-import {getAuth} from "firebase-admin/auth";
-import type {Response} from "express";
+import { getAuth } from "firebase-admin/auth";
+import type { Response } from "express";
 
 // Handler for an authenticated POST endpoint. `uid` is the verified
 // caller's Firebase UID.
@@ -22,7 +22,7 @@ export type AuthenticatedHandler = (
 export function onAuthenticatedPost(
   handler: AuthenticatedHandler
 ): HttpsFunction {
-  return onRequest({region: "europe-north1", cors: true}, async (req, res) => {
+  return onRequest({ region: "europe-north1", cors: true }, async (req, res) => {
     // Handle CORS preflight requests
     if (req.method === "OPTIONS") {
       res.status(204).send();

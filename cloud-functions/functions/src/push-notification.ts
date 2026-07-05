@@ -1,5 +1,5 @@
 import * as logger from "firebase-functions/logger";
-import {onAuthenticatedPost} from "./http";
+import { onAuthenticatedPost } from "./http";
 
 /**
  * POST /pushNotification
