@@ -60,7 +60,7 @@ func (r *FirestoreFlightsReceiver) worker() {
 func (r *FirestoreFlightsReceiver) process(flights []data.FlightJSON) {
 	currentActive := make(map[string]bool)
 	for _, f := range flights {
-		currentActive[f.Aircraft.HexIdent] = true
+		currentActive[f.HexIdent] = true
 	}
 
 	// If there are no active flights, delete all documents in the collection
@@ -79,7 +79,7 @@ func (r *FirestoreFlightsReceiver) process(flights []data.FlightJSON) {
 		}
 		// Reset tracking maps
 		r.lastSeen = make(map[string]bool)
-		r.prevData = make(map[string]map[string]interface{})
+		r.prevData = make(map[string]map[string]any)
 		return
 	}
 
@@ -97,40 +97,40 @@ func (r *FirestoreFlightsReceiver) process(flights []data.FlightJSON) {
 
 	// 2. Upload/Update active flights
 	for _, f := range flights {
-		docRef := r.client.Collection("active_flights").Doc(f.Aircraft.HexIdent)
+		docRef := r.client.Collection("active_flights").Doc(f.HexIdent)
 
 		// Create a map representation of the flight data to upload
-		dataMap := map[string]interface{}{
-			"hex":             f.Aircraft.HexIdent,
-			"callsign":        f.Aircraft.Callsign,
-			"latitude":        f.Aircraft.Latitude,
-			"longitude":       f.Aircraft.Longitude,
-			"altitude":        f.Aircraft.Altitude,
-			"manufacturer":    f.Aircraft.Manufacturer,
-			"model":           f.Aircraft.Model,
-			"registration":    f.Aircraft.Registration,
-			"icaoType":        f.Aircraft.ICAOType,
-			"registeredOwner": f.Aircraft.RegisteredOwner,
-			"operator":        f.Aircraft.Operator,
-			"originICAO":      f.Aircraft.OriginICAO,
-			"originIATA":      f.Aircraft.OriginIATA,
-			"originName":      f.Aircraft.OriginName,
-			"originCity":      f.Aircraft.OriginCity,
-			"destICAO":        f.Aircraft.DestICAO,
-			"destIATA":        f.Aircraft.DestIATA,
-			"destName":        f.Aircraft.DestName,
-			"destCity":        f.Aircraft.DestCity,
+		dataMap := map[string]any{
+			"hex":             f.HexIdent,
+			"callsign":        f.Callsign,
+			"latitude":        f.Latitude,
+			"longitude":       f.Longitude,
+			"altitude":        f.Altitude,
+			"manufacturer":    f.Manufacturer,
+			"model":           f.Model,
+			"registration":    f.Registration,
+			"icaoType":        f.ICAOType,
+			"registeredOwner": f.RegisteredOwner,
+			"operator":        f.Operator,
+			"originICAO":      f.OriginICAO,
+			"originIATA":      f.OriginIATA,
+			"originName":      f.OriginName,
+			"originCity":      f.OriginCity,
+			"destICAO":        f.DestICAO,
+			"destIATA":        f.DestIATA,
+			"destName":        f.DestName,
+			"destCity":        f.DestCity,
 		}
 
 		// Only write if data has changed
-		if prev, ok := r.prevData[f.Aircraft.HexIdent]; ok && reflect.DeepEqual(prev, dataMap) {
+		if prev, ok := r.prevData[f.HexIdent]; ok && reflect.DeepEqual(prev, dataMap) {
 			continue
 		}
 		_, err := docRef.Set(r.ctx, dataMap)
 		if err != nil {
-			slog.Error("failed to write active flight to Firestore", "hex", f.Aircraft.HexIdent, "error", err)
+			slog.Error("failed to write active flight to Firestore", "hex", f.HexIdent, "error", err)
 		} else {
-			r.prevData[f.Aircraft.HexIdent] = dataMap
+			r.prevData[f.HexIdent] = dataMap
 		}
 	}
 
