@@ -1,13 +1,17 @@
 package com.kypeli.flightsoverhead.data
 
 import android.content.Context
+import dev.zacsweers.metro.Inject
 import org.json.JSONArray
 import java.io.IOException
 
-object AirlineResolver {
-    private const val ASSET_FILE_NAME = "airlines.json"
-    private const val KIWI_LOGO_BASE_URL = "https://images.kiwi.com/airlines/64"
+private const val ASSET_FILE_NAME = "airlines.json"
+private const val KIWI_LOGO_BASE_URL = "https://images.kiwi.com/airlines/64"
 
+@Inject
+class AirlineResolver(
+    private val context: Context
+) {
     // Thread-safe cache of resolved logos
     @Volatile
     private var airlineLogoMap: Map<String, String>? = null
@@ -15,7 +19,7 @@ object AirlineResolver {
     /**
      * Initializes and loads the airline logo mapping from assets.
      */
-    private fun loadAirlineMap(context: Context): Map<String, String> {
+    private fun loadAirlineMap(): Map<String, String> {
         val currentMap = airlineLogoMap
         if (currentMap != null) return currentMap
 
@@ -49,14 +53,14 @@ object AirlineResolver {
      * Resolves the airline logo URL based on the flight number's airline code.
      * e.g. "AA123" -> airline code "AA" -> fetches logo from airlines.json or falls back to Kiwi CDN.
      */
-    fun getLogoUrl(context: Context, flightNumber: String): String {
+    fun getLogoUrl(flightNumber: String): String {
         // Extract letters prefix from flight number (e.g., "AA123" -> "AA", "FIN123" -> "FIN")
         val code = flightNumber.takeWhile { it.isLetter() }.uppercase()
         if (code.isBlank()) {
             return ""
         }
 
-        val map = loadAirlineMap(context)
+        val map = loadAirlineMap()
         // Check if we have a direct match in dotmarn's airlines.json
         val customLogoUrl = map[code]
         if (customLogoUrl != null) {

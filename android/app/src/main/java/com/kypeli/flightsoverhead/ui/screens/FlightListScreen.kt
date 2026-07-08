@@ -17,6 +17,11 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import com.kypeli.flightsoverhead.data.AirlineResolver
+import com.kypeli.flightsoverhead.di.LocalAirlineResolver
 import com.kypeli.flightsoverhead.data.model.Flight
 import com.kypeli.flightsoverhead.ui.components.EmptyState
 import com.kypeli.flightsoverhead.ui.components.FlightRow
@@ -87,15 +92,23 @@ fun FlightListScreenPreview() {
             Flight("Delta Airlines", "DL789", "SFO", "JFK"),
             Flight("Southwest", "WN101", "SFO", "LAS"),
         )
+    val context = LocalContext.current
+    val dummyResolver = remember { AirlineResolver(context) }
     FlightsOverheadTheme {
-        FlightListScreen(flights = mockFlights, onRefresh = {})
+        CompositionLocalProvider(LocalAirlineResolver provides dummyResolver) {
+            FlightListScreen(flights = mockFlights, onRefresh = {})
+        }
     }
 }
 
 @Preview(showBackground = true)
 @Composable
 fun FlightListEmptyPreview() {
+    val context = LocalContext.current
+    val dummyResolver = remember { AirlineResolver(context) }
     FlightsOverheadTheme {
-        FlightListScreen(flights = emptyList(), onRefresh = {})
+        CompositionLocalProvider(LocalAirlineResolver provides dummyResolver) {
+            FlightListScreen(flights = emptyList(), onRefresh = {})
+        }
     }
 }

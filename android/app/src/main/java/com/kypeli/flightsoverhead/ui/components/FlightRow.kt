@@ -28,10 +28,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.CompositionLocalProvider
 import coil3.compose.SubcomposeAsyncImage
 import com.kypeli.flightsoverhead.R
 import com.kypeli.flightsoverhead.data.AirlineResolver
 import com.kypeli.flightsoverhead.data.model.Flight
+import com.kypeli.flightsoverhead.di.LocalAirlineResolver
 import com.kypeli.flightsoverhead.ui.theme.DataMonoStyle
 import com.kypeli.flightsoverhead.ui.theme.FlightsOverheadTheme
 import com.kypeli.flightsoverhead.ui.theme.OnSurface
@@ -140,8 +142,8 @@ private fun AirlineLogo(
     flightNumber: String,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    val logoUrl = remember(flightNumber) { AirlineResolver.getLogoUrl(context, flightNumber) }
+    val resolver = LocalAirlineResolver.current
+    val logoUrl = remember(flightNumber) { resolver.getLogoUrl(flightNumber) }
     val airlineCode = remember(flightNumber) { flightNumber.takeWhile { it.isLetter() }.uppercase() }
 
     Box(
@@ -206,15 +208,19 @@ private fun AirlineLogo(
 @Preview(showBackground = true)
 @Composable
 fun FlightRowPreview() {
+    val context = LocalContext.current
+    val dummyResolver = remember { AirlineResolver(context) }
     FlightsOverheadTheme {
-        FlightRow(
-            flight =
-                Flight(
-                    airline = "SkyTrack Pro",
-                    flightNumber = "AY001",
-                    departure = "SFO",
-                    arrival = "JFK",
-                ),
-        )
+        CompositionLocalProvider(LocalAirlineResolver provides dummyResolver) {
+            FlightRow(
+                flight =
+                    Flight(
+                        airline = "SkyTrack Pro",
+                        flightNumber = "AY001",
+                        departure = "SFO",
+                        arrival = "JFK",
+                    ),
+            )
+        }
     }
 }
