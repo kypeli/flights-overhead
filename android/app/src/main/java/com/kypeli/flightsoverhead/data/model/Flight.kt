@@ -5,4 +5,5 @@ data class Flight(
     val flightNumber: String,
     val departure: String,
     val arrival: String,
+    val logoUrl: String = "",
 )

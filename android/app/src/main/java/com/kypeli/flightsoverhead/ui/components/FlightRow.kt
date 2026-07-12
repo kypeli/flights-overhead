@@ -17,6 +17,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Alignment.Companion
@@ -28,7 +29,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.CompositionLocalProvider
 import coil3.compose.SubcomposeAsyncImage
 import com.kypeli.flightsoverhead.R
 import com.kypeli.flightsoverhead.data.AirlineResolver
@@ -54,7 +54,7 @@ fun FlightRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AirlineLogo(
-            flightNumber = flight.flightNumber,
+            flight = flight,
             modifier = Modifier.padding(end = 8.dp),
         )
 
@@ -139,13 +139,9 @@ private fun ColumnScope.FlightDetails(flight: Flight) {
 
 @Composable
 private fun AirlineLogo(
-    flightNumber: String,
+    flight: Flight,
     modifier: Modifier = Modifier,
 ) {
-    val resolver = LocalAirlineResolver.current
-    val logoUrl = remember(flightNumber) { resolver.getLogoUrl(flightNumber) }
-    val airlineCode = remember(flightNumber) { flightNumber.takeWhile { it.isLetter() }.uppercase() }
-
     Box(
         modifier =
             modifier
@@ -159,9 +155,9 @@ private fun AirlineLogo(
                 ).size(64.dp),
         contentAlignment = Alignment.Center,
     ) {
-        if (logoUrl.isNotEmpty()) {
+        if (flight.logoUrl.isNotEmpty()) {
             SubcomposeAsyncImage(
-                model = logoUrl,
+                model = flight.logoUrl,
                 contentDescription = "Airline Logo",
                 modifier = Modifier.fillMaxSize().padding(4.dp),
                 contentScale = ContentScale.Fit,
@@ -183,7 +179,7 @@ private fun AirlineLogo(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = airlineCode.take(2),
+                            text = flight.flightNumber.take(2),
                             color = MaterialTheme.colorScheme.onPrimary,
                             style = MaterialTheme.typography.titleMedium,
                         )
@@ -219,6 +215,7 @@ fun FlightRowPreview() {
                         flightNumber = "AY001",
                         departure = "SFO",
                         arrival = "JFK",
+                        logoUrl = "",
                     ),
             )
         }

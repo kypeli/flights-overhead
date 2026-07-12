@@ -15,25 +15,30 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kypeli.flightsoverhead.data.AirlineResolver
-import com.kypeli.flightsoverhead.di.LocalAirlineResolver
 import com.kypeli.flightsoverhead.data.model.Flight
+import com.kypeli.flightsoverhead.di.LocalAirlineResolver
 import com.kypeli.flightsoverhead.ui.components.EmptyState
 import com.kypeli.flightsoverhead.ui.components.FlightRow
 import com.kypeli.flightsoverhead.ui.theme.FlightsOverheadTheme
+import com.kypeli.flightsoverhead.viewmodel.FlightsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FlightListScreen(
-    flights: List<Flight>,
+    viewModel: FlightsViewModel,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -62,21 +67,31 @@ fun FlightListScreen(
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
-        if (flights.isEmpty()) {
-            EmptyState(
-                onRefresh = onRefresh,
-                modifier = Modifier.padding(innerPadding),
-            )
-        } else {
-            LazyColumn(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
-            ) {
-                items(flights) { flight ->
-                    FlightRow(flight = flight)
-                }
+        FlightsScreenContent(
+            flights = uiState.flights,
+            modifier = Modifier.padding(innerPadding),
+        )
+    }
+}
+
+@Composable
+private fun FlightsScreenContent(
+    flights: List<Flight>,
+    modifier: Modifier = Modifier,
+) {
+    if (flights.isEmpty()) {
+        EmptyState(
+            modifier = modifier,
+            onRefresh = {},
+        )
+    } else {
+        LazyColumn(
+            modifier =
+                modifier
+                    .fillMaxSize(),
+        ) {
+            items(flights) { flight ->
+                FlightRow(flight = flight)
             }
         }
     }
@@ -95,9 +110,7 @@ fun FlightListScreenPreview() {
     val context = LocalContext.current
     val dummyResolver = remember { AirlineResolver(context) }
     FlightsOverheadTheme {
-        CompositionLocalProvider(LocalAirlineResolver provides dummyResolver) {
-            FlightListScreen(flights = mockFlights, onRefresh = {})
-        }
+        FlightsScreenContent(flights = mockFlights)
     }
 }
 
@@ -108,7 +121,7 @@ fun FlightListEmptyPreview() {
     val dummyResolver = remember { AirlineResolver(context) }
     FlightsOverheadTheme {
         CompositionLocalProvider(LocalAirlineResolver provides dummyResolver) {
-            FlightListScreen(flights = emptyList(), onRefresh = {})
+            FlightsScreenContent(flights = emptyList())
         }
     }
 }
