@@ -35,20 +35,6 @@ class MainActivity : ComponentActivity() {
 
                 FlightListScreen(
                     viewModel = vm,
-                    onRefresh = {
-                        // For demonstration purposes, toggle between list and empty state
-                        flights =
-                            if (flights.isEmpty()) {
-                                listOf(
-                                    Flight("American Airlines", "AA123", "SFO", "LAX"),
-                                    Flight("United Airlines", "UA456", "SFO", "ORD"),
-                                    Flight("Delta Airlines", "DL789", "SFO", "JFK"),
-                                    Flight("Southwest", "WN101", "SFO", "LAS"),
-                                )
-                            } else {
-                                emptyList()
-                            }
-                    },
                 )
                 //       }
             }

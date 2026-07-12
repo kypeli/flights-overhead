@@ -23,16 +23,17 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kypeli.flightsoverhead.data.AirlineResolver
 import com.kypeli.flightsoverhead.data.model.Flight
+import com.kypeli.flightsoverhead.ui.components.AuthenticationErrorState
 import com.kypeli.flightsoverhead.ui.components.EmptyState
 import com.kypeli.flightsoverhead.ui.components.FlightRow
 import com.kypeli.flightsoverhead.ui.theme.FlightsOverheadTheme
 import com.kypeli.flightsoverhead.viewmodel.FlightsViewModel
+import com.kypeli.flightsoverhead.viewmodel.UiState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FlightListScreen(
     viewModel: FlightsViewModel,
-    onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -48,7 +49,7 @@ fun FlightListScreen(
                     )
                 },
                 actions = {
-                    IconButton(onClick = onRefresh) {
+                    IconButton(onClick = { viewModel.refresh() }) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = "Refresh",
@@ -65,10 +66,22 @@ fun FlightListScreen(
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
-        FlightsScreenContent(
-            flights = uiState.flights,
-            modifier = Modifier.padding(innerPadding),
-        )
+        val error = uiState.error
+        if (error != null) {
+            when (error) {
+                UiState.Error.Authentication -> {
+                    AuthenticationErrorState(
+                        onRetry = { viewModel.refresh() },
+                        modifier = Modifier.padding(innerPadding),
+                    )
+                }
+            }
+        } else {
+            FlightsScreenContent(
+                flights = uiState.flights,
+                modifier = Modifier.padding(innerPadding),
+            )
+        }
     }
 }
 

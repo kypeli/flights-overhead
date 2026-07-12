@@ -21,6 +21,10 @@ class FlightsViewModel(
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     init {
+        refresh()
+    }
+
+    fun refresh() {
         viewModelScope.launch {
             repository
                 .fetchActiveFlights()
@@ -29,8 +33,12 @@ class FlightsViewModel(
                         flight.copy(logoUrl = airlineResolver.getLogoUrl(flight.flightNumber))
                     }
                 }.onSuccess { flights ->
-                    _uiState.update { currentState ->
-                        currentState.copy(flights = flights)
+                    _uiState.update {
+                        it.copy(flights = flights)
+                    }
+                }.onFailure {
+                    _uiState.update {
+                        it.copy(error = UiState.Error.Authentication)
                     }
                 }
         }
@@ -39,4 +47,9 @@ class FlightsViewModel(
 
 data class UiState(
     val flights: List<Flight> = emptyList(),
-)
+    val error: Error? = null,
+) {
+    enum class Error {
+        Authentication,
+    }
+}
