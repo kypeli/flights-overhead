@@ -2,30 +2,37 @@ import { db } from "./firebase";
 import * as logger from "firebase-functions/logger";
 import { FieldValue } from "firebase-admin/firestore";
 import { ALLOWED_PLATFORMS, Platform, isValidDeviceId } from "./validation";
-import { onAuthenticatedPost } from "./http";
+import { onPost } from "./http";
 
-export const token = onAuthenticatedPost(async (req, res, uid) => {
+export const token = onPost(async (req, res, uid) => {
   // Parse and validate request body
   const body = (req.body ?? {}) as Record<string, unknown>;
   const { token: fcmToken, deviceId, platform = "android" } = body;
 
   if (typeof fcmToken !== "string" || fcmToken.length === 0) {
-    res.status(400)
+    res
+      .status(400)
       .send("Bad Request: 'token' is required and must be a string");
     return;
   }
 
-  if (deviceId !== undefined &&
-    (typeof deviceId !== "string" || !isValidDeviceId(deviceId))) {
+  if (
+    deviceId !== undefined &&
+    (typeof deviceId !== "string" || !isValidDeviceId(deviceId))
+  ) {
     res.status(400).send("Bad Request: 'deviceId' is invalid");
     return;
   }
 
-  if (typeof platform !== "string" ||
-    !ALLOWED_PLATFORMS.includes(platform as Platform)) {
-    res.status(400).send(
-      `Bad Request: 'platform' must be one of ${ALLOWED_PLATFORMS.join(", ")}`
-    );
+  if (
+    typeof platform !== "string" ||
+    !ALLOWED_PLATFORMS.includes(platform as Platform)
+  ) {
+    res
+      .status(400)
+      .send(
+        `Bad Request: 'platform' must be one of ${ALLOWED_PLATFORMS.join(", ")}`,
+      );
     return;
   }
 
@@ -34,19 +41,22 @@ export const token = onAuthenticatedPost(async (req, res, uid) => {
     const docId = deviceId || fcmToken;
     const tokenRef = db.collection("fcm_tokens").doc(docId);
 
-    await tokenRef.set({
-      token: fcmToken,
-      uid: uid,
-      deviceId: deviceId || null,
-      platform: platform,
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
+    await tokenRef.set(
+      {
+        token: fcmToken,
+        uid: uid,
+        deviceId: deviceId || null,
+        platform: platform,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
 
     // Avoid logging docId directly: without a deviceId it is the raw FCM
     // token, which is a credential.
     logger.info(
       `Successfully registered FCM token for user ${uid}` +
-      (deviceId ? ` on device ${deviceId}` : "")
+        (deviceId ? ` on device ${deviceId}` : ""),
     );
     res.status(200).json({ success: true });
   } catch (error) {

@@ -15,13 +15,5 @@ interface FlightsRepository {
 class FlightsRepositoryImpl(
     private val httpClient: HttpClient,
 ) : FlightsRepository {
-    override suspend fun fetchActiveFlights(): Result<List<Flight>> =
-        Result.success(
-            listOf(
-                Flight("American Airlines", "AA123", "SFO", "LAX"),
-                Flight("United Airlines", "UA456", "SFO", "ORD"),
-                Flight("Delta Airlines", "DL789", "SFO", "JFK"),
-                Flight("Southwest", "WN101", "SFO", "LAS"),
-            ),
-        )
+    override suspend fun fetchActiveFlights(): Result<List<Flight>> = Result.success()
 }

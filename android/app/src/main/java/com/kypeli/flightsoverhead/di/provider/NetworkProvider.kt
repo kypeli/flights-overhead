@@ -1,4 +1,4 @@
-package com.kypeli.flightsoverhead.di
+package com.kypeli.flightsoverhead.di.provider
 
 import com.kypeli.flightsoverhead.di.scope.ViewModelScope
 import dev.zacsweers.metro.BindingContainer
