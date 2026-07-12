@@ -2,7 +2,6 @@ package com.kypeli.flightsoverhead.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -17,12 +16,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Alignment.Companion
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -33,7 +29,6 @@ import coil3.compose.SubcomposeAsyncImage
 import com.kypeli.flightsoverhead.R
 import com.kypeli.flightsoverhead.data.AirlineResolver
 import com.kypeli.flightsoverhead.data.model.Flight
-import com.kypeli.flightsoverhead.di.LocalAirlineResolver
 import com.kypeli.flightsoverhead.ui.theme.DataMonoStyle
 import com.kypeli.flightsoverhead.ui.theme.FlightsOverheadTheme
 import com.kypeli.flightsoverhead.ui.theme.OnSurface
@@ -159,7 +154,10 @@ private fun AirlineLogo(
             SubcomposeAsyncImage(
                 model = flight.logoUrl,
                 contentDescription = "Airline Logo",
-                modifier = Modifier.fillMaxSize().padding(4.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(4.dp),
                 contentScale = ContentScale.Fit,
                 loading = {
                     Box(
@@ -175,7 +173,10 @@ private fun AirlineLogo(
                 },
                 error = {
                     Box(
-                        modifier = Modifier.fillMaxSize().background(Primary),
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .background(Primary),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
@@ -188,7 +189,10 @@ private fun AirlineLogo(
             )
         } else {
             Box(
-                modifier = Modifier.fillMaxSize().background(Primary),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(Primary),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -207,17 +211,15 @@ fun FlightRowPreview() {
     val context = LocalContext.current
     val dummyResolver = remember { AirlineResolver(context) }
     FlightsOverheadTheme {
-        CompositionLocalProvider(LocalAirlineResolver provides dummyResolver) {
-            FlightRow(
-                flight =
-                    Flight(
-                        airline = "SkyTrack Pro",
-                        flightNumber = "AY001",
-                        departure = "SFO",
-                        arrival = "JFK",
-                        logoUrl = "",
-                    ),
-            )
-        }
+        FlightRow(
+            flight =
+                Flight(
+                    airline = "SkyTrack Pro",
+                    flightNumber = "AY001",
+                    departure = "SFO",
+                    arrival = "JFK",
+                    logoUrl = "",
+                ),
+        )
     }
 }

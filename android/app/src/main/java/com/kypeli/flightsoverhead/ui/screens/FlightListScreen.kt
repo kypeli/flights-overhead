@@ -15,7 +15,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -24,7 +23,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kypeli.flightsoverhead.data.AirlineResolver
 import com.kypeli.flightsoverhead.data.model.Flight
-import com.kypeli.flightsoverhead.di.LocalAirlineResolver
 import com.kypeli.flightsoverhead.ui.components.EmptyState
 import com.kypeli.flightsoverhead.ui.components.FlightRow
 import com.kypeli.flightsoverhead.ui.theme.FlightsOverheadTheme
@@ -117,11 +115,7 @@ fun FlightListScreenPreview() {
 @Preview(showBackground = true)
 @Composable
 fun FlightListEmptyPreview() {
-    val context = LocalContext.current
-    val dummyResolver = remember { AirlineResolver(context) }
     FlightsOverheadTheme {
-        CompositionLocalProvider(LocalAirlineResolver provides dummyResolver) {
-            FlightsScreenContent(flights = emptyList())
-        }
+        FlightsScreenContent(flights = emptyList())
     }
 }

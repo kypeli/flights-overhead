@@ -1,51 +1,44 @@
 package com.kypeli.flightsoverhead.data
 
 import android.content.Context
+import android.util.Log
 import dev.zacsweers.metro.Inject
 import org.json.JSONArray
-import java.io.IOException
 
 private const val ASSET_FILE_NAME = "airlines.json"
 private const val KIWI_LOGO_BASE_URL = "https://images.kiwi.com/airlines/64"
+private const val TAG = "AirlineResolver"
 
 @Inject
 class AirlineResolver(
-    private val context: Context
+    private val context: Context,
 ) {
-    // Thread-safe cache of resolved logos
-    @Volatile
-    private var airlineLogoMap: Map<String, String>? = null
+    private data class AirlineInfo(
+        val name: String,
+        val logoUrl: String,
+    )
 
-    /**
-     * Initializes and loads the airline logo mapping from assets.
-     */
-    private fun loadAirlineMap(): Map<String, String> {
-        val currentMap = airlineLogoMap
-        if (currentMap != null) return currentMap
-
-        synchronized(this) {
-            val doubleCheckMap = airlineLogoMap
-            if (doubleCheckMap != null) return doubleCheckMap
-
-            val newMap = mutableMapOf<String, String>()
+    private val airlineMap: Map<String, AirlineInfo> by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        buildMap {
             try {
-                val jsonString = context.assets.open(ASSET_FILE_NAME).bufferedReader().use { it.readText() }
+                val jsonString =
+                    context.assets
+                        .open(ASSET_FILE_NAME)
+                        .bufferedReader()
+                        .use { it.readText() }
                 val jsonArray = JSONArray(jsonString)
                 for (i in 0 until jsonArray.length()) {
                     val entry = jsonArray.getJSONObject(i)
                     val id = entry.optString("id").uppercase()
+                    val name = entry.optString("name")
                     val logo = entry.optString("logo")
-                    if (id.isNotBlank() && !logo.isNullOrBlank()) {
-                        newMap[id] = logo
+                    if (id.isNotBlank()) {
+                        put(id, AirlineInfo(name, logo))
                     }
                 }
-            } catch (e: IOException) {
-                e.printStackTrace()
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e(TAG, "Failed to load $ASSET_FILE_NAME", e)
             }
-            airlineLogoMap = newMap
-            return newMap
         }
     }
 
@@ -60,14 +53,23 @@ class AirlineResolver(
             return ""
         }
 
-        val map = loadAirlineMap()
         // Check if we have a direct match in dotmarn's airlines.json
-        val customLogoUrl = map[code]
-        if (customLogoUrl != null) {
-            return customLogoUrl
+        val info = airlineMap[code]
+        if (info != null && info.logoUrl.isNotBlank()) {
+            return info.logoUrl
         }
 
         // If not found in JSON, fall back to the default Kiwi CDN URL pattern
         return "$KIWI_LOGO_BASE_URL/$code.png"
+    }
+
+    /**
+     * Resolves the airline name based on the flight number's airline code.
+     */
+    fun getAirlineName(flightNumber: String): String? {
+        val code = flightNumber.takeWhile { it.isLetter() }.uppercase()
+        if (code.isBlank()) return null
+
+        return airlineMap[code]?.name?.takeIf { it.isNotBlank() }
     }
 }
