@@ -7,20 +7,14 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
+import com.kypeli.flightsoverhead.navigation.FlightListScreenKey
+import com.kypeli.flightsoverhead.navigation.LoginScreenKey
 import com.kypeli.flightsoverhead.ui.screens.FlightListScreen
 import com.kypeli.flightsoverhead.ui.screens.LoginScreen
 import com.kypeli.flightsoverhead.ui.theme.FlightsOverheadTheme
-import kotlinx.serialization.Serializable
-
-@Serializable
-private object LoginScreenKey : NavKey
-
-@Serializable
-private object FlightListScreenKey : NavKey
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
