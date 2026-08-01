@@ -1,5 +1,6 @@
 .claude/*
 service-account-key.json
+android/app/google-services.json
 skills-lock.json
 .DS_Store
 backend/bin/*
