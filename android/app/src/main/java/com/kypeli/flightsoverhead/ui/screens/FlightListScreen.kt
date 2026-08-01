@@ -1,6 +1,9 @@
 package com.kypeli.flightsoverhead.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,12 +20,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.kypeli.flightsoverhead.data.AirlineResolver
 import com.kypeli.flightsoverhead.data.model.Flight
 import com.kypeli.flightsoverhead.ui.components.AuthenticationErrorState
 import com.kypeli.flightsoverhead.ui.components.EmptyState
@@ -43,33 +45,9 @@ fun FlightListScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "SkyTrack Pro",
-                        style = MaterialTheme.typography.headlineMedium,
-                    )
-                },
-                actions = {
-                    IconButton(onClick = { viewModel.refresh() }) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Refresh",
-                        )
-                    }
-                    IconButton(onClick = onSignOut) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                            contentDescription = "Sign Out",
-                        )
-                    }
-                },
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface,
-                        actionIconContentColor = MaterialTheme.colorScheme.primary,
-                    ),
+            FlightListTopAppBar(
+                onRefresh = { viewModel.refresh() },
+                onSignOut = onSignOut,
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -108,6 +86,8 @@ private fun FlightsScreenContent(
             modifier =
                 modifier
                     .fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(flights) { flight ->
                 FlightRow(flight = flight)
@@ -116,7 +96,55 @@ private fun FlightsScreenContent(
     }
 }
 
-@Preview(showBackground = true)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FlightListTopAppBar(
+    onRefresh: () -> Unit,
+    onSignOut: () -> Unit,
+) {
+    TopAppBar(
+        title = {
+            Column {
+                Text(
+                    text = "SkyTrack Pro",
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+                Text(
+                    text = "FLIGHTS OVERHEAD",
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        actions = {
+            IconButton(onClick = onRefresh) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = "Refresh",
+                )
+            }
+            IconButton(onClick = onSignOut) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                    contentDescription = "Sign Out",
+                )
+            }
+        },
+        colors =
+            TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.background,
+                titleContentColor = MaterialTheme.colorScheme.onSurface,
+                actionIconContentColor = MaterialTheme.colorScheme.primary,
+            ),
+    )
+}
+
+@Preview(
+    name = "Phone light",
+    showBackground = true,
+    widthDp = 412,
+    heightDp = 840,
+)
 @Composable
 fun FlightListScreenPreview() {
     val mockFlights =
@@ -126,14 +154,57 @@ fun FlightListScreenPreview() {
             Flight("Delta Airlines", "DL789", "SFO", "JFK"),
             Flight("Southwest", "WN101", "SFO", "LAS"),
         )
-    val context = LocalContext.current
-    val dummyResolver = remember { AirlineResolver(context) }
     FlightsOverheadTheme {
-        FlightsScreenContent(flights = mockFlights)
+        Scaffold(
+            topBar = {
+                FlightListTopAppBar(onRefresh = {}, onSignOut = {})
+            },
+            containerColor = MaterialTheme.colorScheme.background,
+        ) { innerPadding ->
+            FlightsScreenContent(
+                flights = mockFlights,
+                modifier = Modifier.padding(innerPadding),
+            )
+        }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(
+    name = "Tablet light",
+    showBackground = true,
+    widthDp = 840,
+    heightDp = 900,
+)
+@Composable
+fun FlightListScreenTabletPreview() {
+    val mockFlights =
+        listOf(
+            Flight("American Airlines", "AA123", "SFO", "LAX"),
+            Flight("United Airlines", "UA456", "SFO", "ORD"),
+            Flight("Delta Airlines", "DL789", "SFO", "JFK"),
+        )
+    FlightsOverheadTheme {
+        Scaffold(
+            topBar = {
+                FlightListTopAppBar(onRefresh = {}, onSignOut = {})
+            },
+            containerColor = MaterialTheme.colorScheme.background,
+        ) { innerPadding ->
+            FlightsScreenContent(
+                flights = mockFlights,
+                modifier = Modifier.padding(innerPadding),
+            )
+        }
+    }
+}
+
+@Preview(
+    name = "Phone dark",
+    showBackground = true,
+    widthDp = 412,
+    heightDp = 840,
+    uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES,
+)
 @Composable
 fun FlightListEmptyPreview() {
     FlightsOverheadTheme {

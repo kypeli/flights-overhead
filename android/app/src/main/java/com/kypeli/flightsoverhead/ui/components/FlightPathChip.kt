@@ -38,8 +38,8 @@ fun FlightPathChip(
     Box(
         modifier =
             modifier
-                .background(backgroundColor, RoundedCornerShape(4.dp))
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .background(backgroundColor, RoundedCornerShape(50))
+                .padding(horizontal = 10.dp, vertical = 5.dp),
     ) {
         Text(
             text = path.name.uppercase(),
