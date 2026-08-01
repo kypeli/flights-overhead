@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,18 +15,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.SubcomposeAsyncImage
 import com.kypeli.flightsoverhead.R
-import com.kypeli.flightsoverhead.data.AirlineResolver
 import com.kypeli.flightsoverhead.data.model.Flight
 import com.kypeli.flightsoverhead.entity.FlightPath
 import com.kypeli.flightsoverhead.ui.theme.DataMonoStyle
@@ -120,7 +116,7 @@ private fun DepartureArrival() {
 }
 
 @Composable
-private fun ColumnScope.FlightDetails(flight: Flight) {
+private fun FlightDetails(flight: Flight) {
     Text(
         text = flight.airline.uppercase(),
         style = MaterialTheme.typography.headlineSmall,
@@ -209,8 +205,6 @@ private fun AirlineLogo(
 @Preview(showBackground = true)
 @Composable
 fun FlightRowPreview() {
-    val context = LocalContext.current
-    val dummyResolver = remember { AirlineResolver(context) }
     FlightsOverheadTheme {
         FlightRow(
             flight =
