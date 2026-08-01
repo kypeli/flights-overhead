@@ -8,7 +8,6 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -36,12 +35,12 @@ interface AuthRepository {
 class AuthRepositoryImpl : AuthRepository {
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 
-    private val _currentUser = MutableStateFlow<User?>(auth.currentUser?.toUser())
-    override val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
+    override val currentUser: StateFlow<User?>
+        field = MutableStateFlow(auth.currentUser?.toUser())
 
     init {
         auth.addAuthStateListener { firebaseAuth ->
-            _currentUser.value = firebaseAuth.currentUser?.toUser()
+            currentUser.value = firebaseAuth.currentUser?.toUser()
         }
     }
 
