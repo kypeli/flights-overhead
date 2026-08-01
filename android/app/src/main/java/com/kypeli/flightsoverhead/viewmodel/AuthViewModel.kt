@@ -31,7 +31,12 @@ class AuthViewModel(
                 .onSuccess {
                     _uiState.update { it.copy(isLoading = false) }
                 }.onFailure { error ->
-                    _uiState.update { it.copy(isLoading = false, error = error.localizedMessage ?: "Sign in failed") }
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = error.localizedMessage ?: "Sign in failed",
+                        )
+                    }
                 }
         }
     }
@@ -47,7 +52,12 @@ class AuthViewModel(
                 .onSuccess {
                     _uiState.update { it.copy(isLoading = false) }
                 }.onFailure { error ->
-                    _uiState.update { it.copy(isLoading = false, error = error.localizedMessage ?: "Sign up failed") }
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = error.localizedMessage ?: "Sign up failed",
+                        )
+                    }
                 }
         }
     }

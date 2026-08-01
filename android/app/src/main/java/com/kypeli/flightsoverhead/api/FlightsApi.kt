@@ -12,14 +12,16 @@ private enum class ApiEndpoints(
 }
 
 object FlightsApi {
-    suspend fun getAboveFlights(httpClient: HttpClient, token: String?): Result<List<FlightDto>> =
+    suspend fun getAboveFlights(
+        httpClient: HttpClient,
+        token: String?,
+    ): Result<List<FlightDto>> =
         runCatching {
             httpClient
                 .get(ApiEndpoints.OVERHEAD_FLIGHTS.url) {
                     if (token != null) {
                         header("Authorization", "Bearer $token")
                     }
-                }
-                .body<List<FlightDto>>()
+                }.body<List<FlightDto>>()
         }
 }

@@ -24,38 +24,39 @@ import com.kypeli.flightsoverhead.ui.theme.FlightsOverheadTheme
 @Composable
 fun EmptyState(
     onRefresh: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Center,
     ) {
         Icon(
             imageVector = Icons.Outlined.AirplanemodeInactive,
             contentDescription = null,
             modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f)
+            tint = MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f),
         )
         Spacer(modifier = Modifier.height(24.dp))
         Text(
             text = "No Flights Found",
             style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = "There are no flights currently being tracked in your vicinity. Try refreshing to search again.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
         )
         Spacer(modifier = Modifier.height(32.dp))
         Button(
             onClick = onRefresh,
-            shape = MaterialTheme.shapes.small
+            shape = MaterialTheme.shapes.small,
         ) {
             Text(text = "Start Tracking")
         }
