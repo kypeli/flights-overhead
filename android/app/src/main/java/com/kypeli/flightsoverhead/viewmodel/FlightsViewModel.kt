@@ -30,7 +30,7 @@ class FlightsViewModel(
                 .fetchActiveFlights()
                 .map {
                     it.map { flight ->
-                        flight.copy(logoUrl = airlineResolver.getLogoUrl(flight.flightNumber))
+                        flight.copy(logoUrl = airlineResolver.getLogoUrl(flight.airline))
                     }
                 }.onSuccess { flights ->
                     _uiState.update {
