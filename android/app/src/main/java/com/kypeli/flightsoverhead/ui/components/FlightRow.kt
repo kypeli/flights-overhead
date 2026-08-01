@@ -29,6 +29,7 @@ import coil3.compose.SubcomposeAsyncImage
 import com.kypeli.flightsoverhead.R
 import com.kypeli.flightsoverhead.data.AirlineResolver
 import com.kypeli.flightsoverhead.data.model.Flight
+import com.kypeli.flightsoverhead.entity.FlightPath
 import com.kypeli.flightsoverhead.ui.theme.DataMonoStyle
 import com.kypeli.flightsoverhead.ui.theme.FlightsOverheadTheme
 import com.kypeli.flightsoverhead.ui.theme.OnSurface
@@ -66,7 +67,7 @@ fun FlightRow(
 @Composable
 private fun RowScope.AircraftFlight() {
     Column(modifier = Modifier.align(Alignment.Top), horizontalAlignment = Alignment.End) {
-        StatusChip(status = "climbing", modifier = Modifier.padding(bottom = 4.dp))
+        FlightPathChip(path = FlightPath.Climbing, modifier = Modifier.padding(bottom = 4.dp))
         Text(
             text = "28 mi away",
             style = DataMonoStyle,
