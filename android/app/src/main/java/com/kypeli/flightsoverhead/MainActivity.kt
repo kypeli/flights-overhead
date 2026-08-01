@@ -4,13 +4,16 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import com.kypeli.flightsoverhead.data.model.Flight
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.ui.NavDisplay
 import com.kypeli.flightsoverhead.ui.screens.FlightListScreen
 import com.kypeli.flightsoverhead.ui.theme.FlightsOverheadTheme
+import kotlinx.serialization.Serializable
+
+@Serializable
+private object FlightListScreenKey : NavKey
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -21,22 +24,18 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             FlightsOverheadTheme {
-                // CompositionLocalProvider(LocalMetroViewModelFactory provides vmFactory) {
-                var flights by remember {
-                    mutableStateOf(
-                        listOf(
-                            Flight("American Airlines", "AA123", "SFO", "LAX"),
-                            Flight("United Airlines", "UA456", "SFO", "ORD"),
-                            Flight("Delta Airlines", "DL789", "SFO", "JFK"),
-                            Flight("Southwest", "WN101", "SFO", "LAS"),
-                        ),
-                    )
-                }
+                val backStack = rememberNavBackStack(FlightListScreenKey)
+                val provider =
+                    entryProvider {
+                        entry<FlightListScreenKey> {
+                            FlightListScreen(viewModel = vm)
+                        }
+                    }
 
-                FlightListScreen(
-                    viewModel = vm,
+                NavDisplay(
+                    backStack = backStack,
+                    entryProvider = provider,
                 )
-                //       }
             }
         }
     }
