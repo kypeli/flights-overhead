@@ -9,7 +9,7 @@ import { getFirestore } from "firebase-admin/firestore";
  */
 export const overheadFlights = onGet(async (req, res) => {
   const db = getFirestore();
-  const flightsRef = db.collection("flights");
+  const flightsRef = db.collection("active_flights");
   const snapshot = await flightsRef.get();
   const flights = snapshot.docs.map((doc) => doc.data());
   res.json(flights);
