@@ -16,11 +16,14 @@ interface FlightsRepository {
 @Inject
 class FlightsRepositoryImpl(
     private val httpClient: HttpClient,
+    private val authRepository: AuthRepository,
 ) : FlightsRepository {
-    override suspend fun fetchActiveFlights(): Result<List<Flight>> =
-        FlightsApi
-            .getAboveFlights(httpClient)
+    override suspend fun fetchActiveFlights(): Result<List<Flight>> {
+        val token = authRepository.getAccessToken()
+        return FlightsApi
+            .getAboveFlights(httpClient, token)
             .map { dtos -> dtos.map { it.toFlight() } }
+    }
 }
 
 private fun FlightDto.toFlight(): Flight =

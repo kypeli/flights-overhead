@@ -4,13 +4,20 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import com.kypeli.flightsoverhead.ui.screens.FlightListScreen
+import com.kypeli.flightsoverhead.ui.screens.LoginScreen
 import com.kypeli.flightsoverhead.ui.theme.FlightsOverheadTheme
 import kotlinx.serialization.Serializable
+
+@Serializable
+private object LoginScreenKey : NavKey
 
 @Serializable
 private object FlightListScreenKey : NavKey
@@ -20,15 +27,43 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val vm = (application as FlightsOverheadApplication).viewModelGraph.flightsViewModel
+        val app = application as FlightsOverheadApplication
+        val flightsVm = app.viewModelGraph.flightsViewModel
+        val authVm = app.viewModelGraph.authViewModel
 
         setContent {
             FlightsOverheadTheme {
-                val backStack = rememberNavBackStack(FlightListScreenKey)
+                val currentUser by authVm.currentUser.collectAsState()
+
+                // State-driven backstack
+                val initialKey = if (currentUser == null) LoginScreenKey else FlightListScreenKey
+                val backStack = rememberNavBackStack(initialKey)
+
+                // Sync back stack when auth state changes
+                LaunchedEffect(currentUser) {
+                    if (currentUser == null) {
+                        if (backStack.lastOrNull() != LoginScreenKey) {
+                            backStack.clear()
+                            backStack.add(LoginScreenKey)
+                        }
+                    } else {
+                        if (backStack.lastOrNull() != FlightListScreenKey) {
+                            backStack.clear()
+                            backStack.add(FlightListScreenKey)
+                        }
+                    }
+                }
+
                 val provider =
                     entryProvider {
+                        entry<LoginScreenKey> {
+                            LoginScreen(viewModel = authVm)
+                        }
                         entry<FlightListScreenKey> {
-                            FlightListScreen(viewModel = vm)
+                            FlightListScreen(
+                                viewModel = flightsVm,
+                                onSignOut = { authVm.signOut() },
+                            )
                         }
                     }
 

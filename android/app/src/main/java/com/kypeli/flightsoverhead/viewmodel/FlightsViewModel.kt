@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kypeli.flightsoverhead.data.AirlineResolver
 import com.kypeli.flightsoverhead.data.model.Flight
+import com.kypeli.flightsoverhead.repository.AuthRepository
 import com.kypeli.flightsoverhead.repository.FlightsRepository
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,12 +17,21 @@ import kotlinx.coroutines.launch
 class FlightsViewModel(
     private val repository: FlightsRepository,
     private val airlineResolver: AirlineResolver,
+    private val authRepository: AuthRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     init {
-        refresh()
+        viewModelScope.launch {
+            authRepository.currentUser.collect { user ->
+                if (user != null) {
+                    refresh()
+                } else {
+                    _uiState.update { it.copy(flights = emptyList(), error = null) }
+                }
+            }
+        }
     }
 
     fun refresh() {

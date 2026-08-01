@@ -1,4 +1,10 @@
 {
+  "auth": {
+    "providers": {
+      "anonymous": false,
+      "emailPassword": true
+    }
+  },
   "firestore": {
     "database": "(default)",
     "location": "europe-north1",

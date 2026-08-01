@@ -22,10 +22,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.kypeli.flightsoverhead" />
+                  <option name="mobileSdkAppId" value="1:666712521142:android:e985e178915146b297a917" />
+                  <option name="projectId" value="flights-overhead" />
+                  <option name="projectNumber" value="666712521142" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />
