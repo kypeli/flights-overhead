@@ -5,7 +5,7 @@ Welcome! This document is designed for AI coding agents to quickly understand th
 ---
 
 ## 📌 Project Overview
-The `flights-overhead` project is a Go-based backend designed to connect to local ADS-B receivers over raw TCP (no HTTP), read raw comma-separated **BaseStation (SBS-1)** stream lines, parse them into type-safe Go structs, and track the real-time aggregated telemetry state of aircraft currently flying overhead.
+The `flights-overhead` project is an end-to-end flight tracking system. It connects to local ADS-B receivers over raw TCP (no HTTP), reads raw comma-separated **BaseStation (SBS-1)** stream lines, parses them into type-safe Go structs, aggregates real-time telemetry of aircraft flying overhead, enriches the data via adsbdb.com, and synchronizes state to an embedded web UI, Google Cloud Firestore, and a companion Android mobile app.
 
 ---
 
@@ -20,21 +20,19 @@ The `flights-overhead` project is a Go-based backend designed to connect to loca
     * `text/tabwriter` for clean console dashboards.
     * `net/http` for the embedded web dashboard, SSE broker, and outbound API calls to adsbdb.com.
 * **Firebase Functions**: Node.js 22, TypeScript, [firebase-functions](https://www.npmjs.com/package/firebase-functions) v2 SDK.
+* **Android Mobile App**: Kotlin, Jetpack Compose Material 3, Navigation3, Metro DI, Ktor Client (OkHttp engine), Firebase Auth, Coil.
 * **External HTTP API**: [adsbdb.com](https://api.adsbdb.com/v0) — queried at runtime for aircraft metadata (manufacturer, registration, owner) and flight route (origin/destination airports) via `/aircraft/{hex}` and `/callsign/{callsign}` endpoints. Calls are rate-limited (max 2 req/s) and in-memory cached.
 
 ---
 
 ## 📁 Repository Directory Structure
 
-The repository is split into two independent subprojects: **`backend/`** (the Go ADS-B
-tracker, a self-contained Go module) and **`cloud-functions/`** (the Firebase project and
-TypeScript Cloud Functions). The `Taskfile.yml` at the repo root drives both — each task
-declares a `dir:` so it runs inside the correct subproject.
+The repository is organized into three subprojects: **`backend/`** (the Go ADS-B tracker), **`cloud-functions/`** (the Firebase project and TypeScript Cloud Functions), and **`android/`** (the native Android mobile client). The `Taskfile.yml` at the repo root drives automation across subprojects.
 
 ```
 flights-overhead/
-├── AGENT.md                       # This onboarding document
-├── AGENTS.md                      # Symlink → AGENT.md (used by Codex)
+├── AGENTS.md                      # This onboarding document
+├── CLAUDE.md                      # Symlink → AGENTS.md (used by Claude Code)
 ├── Taskfile.yml                   # Task runner automation (build/run in backend, deploy in cloud-functions)
 ├── service-account-key.json       # Firestore service account key (gitignored, repo root)
 ├── backend/                       # Go ADS-B tracker (module: flights-overhead)
@@ -67,22 +65,39 @@ flights-overhead/
 │           ├── parser_test.go     # Resiliency unit tests for the parser
 │           ├── tracker.go         # Thread-safe flight state registrar, orphan cleaner, adsbdb.com API worker
 │           └── tracker_test.go    # Unit tests for tracker state consolidation
-└── cloud-functions/               # Firebase project (deploy from this directory)
-    ├── firebase.json              # Firebase/Firestore project setup configuration
-    ├── .firebaserc                # Firebase project alias (default: flights-overhead)
-    ├── firestore.rules            # Firestore security rules
-    ├── firestore.indexes.json     # Firestore index definitions
-    ├── flights-overhead.service   # Systemd service unit for Raspbian deployment
-    └── functions/                 # Firebase Cloud Functions (TypeScript)
-        ├── package.json           # Node.js dependencies and lifecycle scripts
-        ├── tsconfig.json          # TypeScript compilation configuration
-        └── src/
-            ├── index.ts           # Functions entrypoint and triggers
-            ├── firebase.ts        # Admin SDK initialization & config (maxInstances: 10)
-            ├── http.ts            # Authenticated post helper (CORS, POST enforce, ID token verify)
-            ├── token.ts           # FCM token registration endpoint
-            ├── validation.ts      # Client deviceId & platform validation rules
-            └── push-notification.ts # Scaffold for future push notification triggers
+├── cloud-functions/               # Firebase project (deploy from this directory)
+│   ├── firebase.json              # Firebase/Firestore project setup configuration
+│   ├── .firebaserc                # Firebase project alias (default: flights-overhead)
+│   ├── firestore.rules            # Firestore security rules
+│   ├── firestore.indexes.json     # Firestore index definitions
+│   ├── flights-overhead.service   # Systemd service unit for Raspbian deployment
+│   └── functions/                 # Firebase Cloud Functions (TypeScript)
+│       ├── package.json           # Node.js dependencies and lifecycle scripts
+│       ├── tsconfig.json          # TypeScript compilation configuration
+│       └── src/
+│           ├── index.ts           # Functions entrypoint and triggers
+│           ├── firebase.ts        # Admin SDK initialization & config (maxInstances: 10)
+│           ├── http.ts            # Authenticated HTTP method helpers (CORS, GET/POST enforce, ID token verify)
+│           ├── flights.ts         # GET /overheadFlights endpoint handler
+│           ├── token.ts           # FCM token registration endpoint
+│           ├── validation.ts      # Client deviceId & platform validation rules
+│           └── push-notification.ts # Scaffold for future push notification triggers
+└── android/                       # Native Android client (Jetpack Compose & Kotlin)
+    ├── build.gradle.kts           # Root Gradle build configuration
+    ├── settings.gradle.kts        # Android project settings & module configuration
+    └── app/
+        ├── build.gradle.kts       # App module dependencies & SDK configuration
+        └── src/main/java/com/kypeli/flightsoverhead/
+            ├── FlightsOverheadApplication.kt # Application class & DI initialization
+            ├── MainActivity.kt    # Single activity hosting Compose Navigation3
+            ├── api/               # Ktor HTTP client & DTO definitions
+            ├── data/              # Data models and airline resolver
+            ├── di/                # Metro dependency injection graphs and scopes
+            ├── entity/            # Domain entities (e.g. FlightPath)
+            ├── navigation/        # Navigation3 route entries
+            ├── repository/        # FlightsRepository and AuthRepository
+            ├── ui/                # Jetpack Compose UI (screens, theme, components)
+            └── viewmodel/         # FlightsViewModel and AuthViewModel
 ```
 
 ---
@@ -184,21 +199,32 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
 * Main entry point is [cloud-functions/functions/src/index.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/index.ts). Global configuration (such as cost-control limits like `maxInstances: 10`) is initialized in [cloud-functions/functions/src/firebase.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/firebase.ts) via `setGlobalOptions`.
 * Built and validated prior to deployment using the predeploy hooks configured in [cloud-functions/firebase.json](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/firebase.json) (`npm run lint` and `npm run build`).
 * **Endpoints**:
-  * **`token`** ([cloud-functions/functions/src/token.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/token.ts)): Registers/updates client FCM (Firebase Cloud Messaging) tokens in the `fcm_tokens` Firestore collection. Merges documents based on client-provided `deviceId` or raw `token`, setting fields like `platform` ("android", "ios", "web"), `uid`, and `updatedAt`.
+  * **`overheadFlights`** ([cloud-functions/functions/src/flights.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/flights.ts)): Authenticated `GET` endpoint returning active overhead flights from the `active_flights` Firestore collection.
+  * **`token`** ([cloud-functions/functions/src/token.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/token.ts)): Authenticated `POST` endpoint that registers/updates client FCM (Firebase Cloud Messaging) tokens in the `fcm_tokens` Firestore collection. Merges documents based on client-provided `deviceId` or raw `token`, setting fields like `platform` ("android", "ios", "web"), `uid`, and `updatedAt`.
   * **`pushNotification`** ([cloud-functions/functions/src/push-notification.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/push-notification.ts)): Pre-configured endpoint scaffold for future push-notification features (currently returns HTTP 501 Not Implemented).
-  * Both handlers are wrapped by `onAuthenticatedPost` ([cloud-functions/functions/src/http.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/http.ts)), enforcing CORS preflight, `POST` requests, and verifying the Firebase ID Token in the `Authorization` header.
+  * Handlers are wrapped by `onGet` / `onPost` ([cloud-functions/functions/src/http.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/http.ts)), enforcing CORS preflight, HTTP method verification, and Firebase ID Token validation in the `Authorization` header.
+
+### 11. Android Mobile Client (`android/`)
+* Native Android client developed in Kotlin with Jetpack Compose Material 3 and Navigation3.
+* Architecture: MVVM with reactive UI state and repository abstractions.
+  * `FlightsViewModel` & `FlightsRepository`: Fetches real-time flight lists from the `overheadFlights` Cloud Function via Ktor HTTP Client.
+  * `AuthViewModel` & `AuthRepository`: Manages Firebase Authentication state.
+  * `AirlineResolver`: Parses operator and airline codes to resolve airline brand names and assets.
+  * UI components: `FlightListScreen`, `FlightRow`, `FlightPathChip`, `EmptyState`, and `AuthenticationErrorState`.
 
 ---
 
 ## 🛠️ Operational Commands
 
-### Run Automated Tests
+### Go Backend
+
+#### Run Automated Tests
 ```bash
 cd backend
 go test -v ./...
 ```
 
-### Start the Application (connecting to an ADS-B receiver)
+#### Start the Application (connecting to an ADS-B receiver)
 
 Using `task` automation (run from the repo root — the `run` task builds and runs inside `backend/`):
 ```bash
@@ -230,7 +256,7 @@ go run main.go \
 | `-firestore-project` | *(required)* | Firebase Project ID for Firestore integration. |
 | `-firestore-credentials` | *(required)* | Path to the service account credentials JSON key file. |
 
-### Firebase Functions Commands
+### Firebase Cloud Functions
 
 Manage, build, and deploy the functions. The functions package lives at
 `cloud-functions/functions/`, and the `firebase` CLI must be run from `cloud-functions/`
@@ -245,6 +271,15 @@ Manage, build, and deploy the functions. The functions package lives at
 | `cd cloud-functions && firebase deploy --only functions` | Alternative command to deploy only the functions component. |
 | `task deploy-functions` | Built-in Taskfile command (from repo root) that deploys from `cloud-functions/`. |
 
+### Android Mobile App
+
+The Android subproject lives in `android/`:
+
+| Command | Action |
+|---|---|
+| `cd android && ./gradlew assembleDebug` | Build the debug APK. |
+| `cd android && ./gradlew test` | Run unit tests across modules. |
+| `cd android && ./gradlew connectedAndroidTest` | Run instrumented tests on an attached device or emulator. |
 
 ---
 
