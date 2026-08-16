@@ -5,12 +5,6 @@ import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 
-private enum class ApiEndpoints(
-    val url: String,
-) {
-    OVERHEAD_FLIGHTS(url = "https://overheadflights-g5q7shkmca-lz.a.run.app"),
-}
-
 object FlightsApi {
     suspend fun getAboveFlights(
         httpClient: HttpClient,

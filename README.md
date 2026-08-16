@@ -191,7 +191,7 @@ The repository contains Firebase Cloud Functions (v2 API) written in TypeScript 
 
 ### Available Endpoints
 * **`overheadFlights` (Authenticated GET)**: Retrieves the current snapshot of active overhead flights directly from the `active_flights` Firestore collection.
-* **`token` (Authenticated POST)**: Registers/updates client FCM (Firebase Cloud Messaging) tokens in the `fcm_tokens` Firestore collection. Accepts `token`, optional `deviceId`, and optional `platform` (`android`, `ios`, `web`).
+* **`token` (Authenticated POST)**: Registers/updates client Firebase Installation IDs (FIDs) in the `fcm_tokens` Firestore collection. Accepts `installationId` and optional `platform` (`android`, `ios`, `web`). Keyed by `installationId`.
 * **`pushNotification` (Authenticated POST)**: Scaffold for future push-notification logic (currently returns `501 Not Implemented`).
 
 All endpoints enforce SSL, CORS preflight, HTTP method constraints, and require a valid Firebase ID Token passed as a Bearer token in the `Authorization` header.

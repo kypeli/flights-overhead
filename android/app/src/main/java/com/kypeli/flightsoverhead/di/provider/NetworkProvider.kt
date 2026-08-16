@@ -27,6 +27,7 @@ object NetworkProvider {
                     Json {
                         ignoreUnknownKeys = true
                         prettyPrint = true
+                        encodeDefaults = true
                     },
                 )
             }

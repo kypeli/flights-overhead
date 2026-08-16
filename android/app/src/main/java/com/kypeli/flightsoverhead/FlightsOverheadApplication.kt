@@ -19,5 +19,6 @@ class FlightsOverheadApplication : Application() {
         }
         appGraph = createGraphFactory<AppGraph.Factory>().create(this)
         viewModelGraph = appGraph.createViewModelGraph()
+        viewModelGraph.tokenService.startObserving()
     }
 }

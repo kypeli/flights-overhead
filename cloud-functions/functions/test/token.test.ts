@@ -33,7 +33,7 @@ describe("token endpoint (token.ts)", () => {
   it("rejects unauthenticated requests with 401 Unauthorized", async () => {
     const req = createMockRequest({
       method: "POST",
-      body: { token: "fcm-token-123" },
+      body: { installationId: "fid-123" },
     });
     const res = new MockResponse();
 
@@ -41,7 +41,7 @@ describe("token endpoint (token.ts)", () => {
     assert.strictEqual(res.statusCode, 401);
   });
 
-  it("registers token with deviceId and explicit platform successfully", async () => {
+  it("registers installationId keyed by Firebase UID with explicit platform successfully", async () => {
     let savedCollection = "";
     let savedDocId = "";
     let savedData: unknown = null;
@@ -66,8 +66,7 @@ describe("token endpoint (token.ts)", () => {
       method: "POST",
       headers: { authorization: "Bearer valid-token" },
       body: {
-        token: "sample-fcm-token",
-        deviceId: "device-uuid-1",
+        installationId: "sample-installation-id",
         platform: "ios",
       },
     });
@@ -78,18 +77,22 @@ describe("token endpoint (token.ts)", () => {
     assert.strictEqual(res.statusCode, 200);
     assert.deepStrictEqual(res.body, { success: true });
     assert.strictEqual(savedCollection, "fcm_tokens");
-    assert.strictEqual(savedDocId, "device-uuid-1");
+    assert.strictEqual(savedDocId, "user-abc");
     assert.deepStrictEqual(savedOptions, { merge: true });
 
     const doc = savedData as Record<string, unknown>;
-    assert.strictEqual(doc.token, "sample-fcm-token");
+    assert.strictEqual(doc.installationId, "sample-installation-id");
     assert.strictEqual(doc.uid, "user-abc");
-    assert.strictEqual(doc.deviceId, "device-uuid-1");
     assert.strictEqual(doc.platform, "ios");
-    assert.ok(doc.updatedAt);
+    assert.strictEqual(typeof doc.updatedAt, "string");
+    assert.ok(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(
+        doc.updatedAt as string,
+      ),
+    );
   });
 
-  it("uses fcmToken as document ID and sets deviceId to null when deviceId is omitted", async () => {
+  it("uses Firebase UID as document ID and defaults platform to android", async () => {
     let savedDocId = "";
     let savedData: unknown = null;
 
@@ -108,7 +111,7 @@ describe("token endpoint (token.ts)", () => {
       method: "POST",
       headers: { authorization: "Bearer valid-token" },
       body: {
-        token: "fcm-standalone-token",
+        installationId: "fid-standalone",
       },
     });
     const res = new MockResponse();
@@ -116,21 +119,27 @@ describe("token endpoint (token.ts)", () => {
     await token(req, asResponse(res));
 
     assert.strictEqual(res.statusCode, 200);
-    assert.strictEqual(savedDocId, "fcm-standalone-token");
+    assert.strictEqual(savedDocId, "user-abc");
 
     const doc = savedData as Record<string, unknown>;
-    assert.strictEqual(doc.token, "fcm-standalone-token");
-    assert.strictEqual(doc.deviceId, null);
+    assert.strictEqual(doc.installationId, "fid-standalone");
+    assert.strictEqual(doc.uid, "user-abc");
     assert.strictEqual(doc.platform, "android"); // default
+    assert.strictEqual(typeof doc.updatedAt, "string");
+    assert.ok(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(
+        doc.updatedAt as string,
+      ),
+    );
   });
 
   describe("validation failures", () => {
-    it("returns 400 when token is missing or empty", async () => {
+    it("returns 400 when installationId is missing or empty or non-string", async () => {
       const invalidBodies = [
         {},
-        { token: "" },
-        { token: 123 },
-        { token: null },
+        { installationId: "" },
+        { installationId: 123 },
+        { installationId: null },
       ];
 
       for (const body of invalidBodies) {
@@ -143,38 +152,18 @@ describe("token endpoint (token.ts)", () => {
 
         await token(req, asResponse(res));
         assert.strictEqual(res.statusCode, 400);
-        assert.strictEqual(res.body, "Bad Request: 'token' is required and must be a string");
-      }
-    });
-
-    it("returns 400 when deviceId is invalid or non-string", async () => {
-      const invalidBodies = [
-        { token: "valid-tok", deviceId: "invalid/id" },
-        { token: "valid-tok", deviceId: "." },
-        { token: "valid-tok", deviceId: ".." },
-        { token: "valid-tok", deviceId: "__reserved__" },
-        { token: "valid-tok", deviceId: 123 },
-      ];
-
-      for (const body of invalidBodies) {
-        const req = createMockRequest({
-          method: "POST",
-          headers: { authorization: "Bearer valid-token" },
-          body,
-        });
-        const res = new MockResponse();
-
-        await token(req, asResponse(res));
-        assert.strictEqual(res.statusCode, 400);
-        assert.strictEqual(res.body, "Bad Request: 'deviceId' is invalid");
+        assert.strictEqual(
+          res.body,
+          "Bad Request: 'installationId' is required and must be a string",
+        );
       }
     });
 
     it("returns 400 when platform is unsupported", async () => {
       const invalidBodies = [
-        { token: "valid-tok", platform: "windows" },
-        { token: "valid-tok", platform: "macos" },
-        { token: "valid-tok", platform: 123 },
+        { installationId: "valid-fid", platform: "windows" },
+        { installationId: "valid-fid", platform: "macos" },
+        { installationId: "valid-fid", platform: 123 },
       ];
 
       for (const body of invalidBodies) {
@@ -209,7 +198,7 @@ describe("token endpoint (token.ts)", () => {
         method: "POST",
         headers: { authorization: "Bearer valid-token" },
         body: {
-          token: "fcm-tok",
+          installationId: "fid-test",
         },
       });
       const res = new MockResponse();

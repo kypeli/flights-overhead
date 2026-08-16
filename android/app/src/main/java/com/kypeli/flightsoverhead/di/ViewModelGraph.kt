@@ -1,6 +1,8 @@
 package com.kypeli.flightsoverhead.di
 
 import com.kypeli.flightsoverhead.di.scope.ViewModelScope
+import com.kypeli.flightsoverhead.repository.TokenRepository
+import com.kypeli.flightsoverhead.service.TokenService
 import com.kypeli.flightsoverhead.viewmodel.AuthViewModel
 import com.kypeli.flightsoverhead.viewmodel.FlightsViewModel
 import dev.zacsweers.metro.AppScope
@@ -11,6 +13,8 @@ import dev.zacsweers.metro.GraphExtension
 interface ViewModelGraph {
     val flightsViewModel: FlightsViewModel
     val authViewModel: AuthViewModel
+    val tokenRepository: TokenRepository
+    val tokenService: TokenService
 
     @ContributesTo(AppScope::class)
     @GraphExtension.Factory
