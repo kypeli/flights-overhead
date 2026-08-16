@@ -1,4 +1,4 @@
-import { onRequest, Request, HttpsFunction } from "firebase-functions/v2/https";
+import { onRequest, type Request, type HttpsFunction } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { getAuth } from "firebase-admin/auth";
 import type { Response } from "express";

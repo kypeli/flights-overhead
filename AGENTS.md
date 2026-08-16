@@ -264,11 +264,13 @@ Manage, build, and deploy the functions. The functions package lives at
 
 | Command | Action |
 |---|---|
+| `npm run --prefix cloud-functions/functions test` | Run unit tests for Firebase Functions. |
 | `npm run --prefix cloud-functions/functions lint` | Lint Firebase Functions source files. |
 | `npm run --prefix cloud-functions/functions build` | Compile TypeScript functions code to JavaScript. |
 | `npm run --prefix cloud-functions/functions serve` | Compile and start the local Firebase emulator for Functions. |
 | `npm run --prefix cloud-functions/functions deploy` | Deploy Cloud Functions to Firebase. |
 | `cd cloud-functions && firebase deploy --only functions` | Alternative command to deploy only the functions component. |
+| `task test-functions` | Built-in Taskfile command (from repo root) to run Cloud Functions unit tests. |
 | `task deploy-functions` | Built-in Taskfile command (from repo root) that deploys from `cloud-functions/`. |
 
 ### Android Mobile App

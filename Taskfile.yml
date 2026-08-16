@@ -45,9 +45,16 @@ tasks:
     cmds:
       - ./bin/flights-overhead -tracker-addr="{{.TRACKER}}:30003" -http="{{.WEBSERVER}}" -lat="{{.LAT}}" -lon="{{.LON}}" -firestore-project="{{.PROJECT}}" -firestore-credentials="{{.CREDENTIALS}}" {{.CLI_ARGS}}
 
+  test-functions:
+    desc: Run unit tests for Firebase Cloud Functions
+    dir: cloud-functions/functions
+    cmds:
+      - npm test
+
   deploy-functions:
     desc: Build and deploy Firebase Cloud Functions to production
     dir: cloud-functions
     cmds:
       - npx -y firebase-tools@latest deploy --only functions
+
 
