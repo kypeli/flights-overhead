@@ -41,7 +41,7 @@ describe("token endpoint (token.ts)", () => {
     assert.strictEqual(res.statusCode, 401);
   });
 
-  it("registers installationId keyed by Firebase UID with explicit platform successfully", async () => {
+  it("registers installationId keyed by installation ID with explicit platform successfully", async () => {
     let savedCollection = "";
     let savedDocId = "";
     let savedData: unknown = null;
@@ -77,7 +77,7 @@ describe("token endpoint (token.ts)", () => {
     assert.strictEqual(res.statusCode, 200);
     assert.deepStrictEqual(res.body, { success: true });
     assert.strictEqual(savedCollection, "fcm_tokens");
-    assert.strictEqual(savedDocId, "user-abc");
+    assert.strictEqual(savedDocId, "sample-installation-id");
     assert.deepStrictEqual(savedOptions, { merge: true });
 
     const doc = savedData as Record<string, unknown>;
@@ -92,7 +92,7 @@ describe("token endpoint (token.ts)", () => {
     );
   });
 
-  it("uses Firebase UID as document ID and defaults platform to android", async () => {
+  it("uses installationId as document ID and defaults platform to android", async () => {
     let savedDocId = "";
     let savedData: unknown = null;
 
@@ -119,7 +119,7 @@ describe("token endpoint (token.ts)", () => {
     await token(req, asResponse(res));
 
     assert.strictEqual(res.statusCode, 200);
-    assert.strictEqual(savedDocId, "user-abc");
+    assert.strictEqual(savedDocId, "fid-standalone");
 
     const doc = savedData as Record<string, unknown>;
     assert.strictEqual(doc.installationId, "fid-standalone");
@@ -155,6 +155,31 @@ describe("token endpoint (token.ts)", () => {
         assert.strictEqual(
           res.body,
           "Bad Request: 'installationId' is required and must be a string",
+        );
+      }
+    });
+
+    it("returns 400 when installationId is not a valid Firestore document ID", async () => {
+      const invalidIds = [
+        "invalid/id/with/slash",
+        ".",
+        "..",
+        "__reserved__",
+      ];
+
+      for (const id of invalidIds) {
+        const req = createMockRequest({
+          method: "POST",
+          headers: { authorization: "Bearer valid-token" },
+          body: { installationId: id },
+        });
+        const res = new MockResponse();
+
+        await token(req, asResponse(res));
+        assert.strictEqual(res.statusCode, 400);
+        assert.strictEqual(
+          res.body,
+          "Bad Request: 'installationId' is invalid",
         );
       }
     });

@@ -1,6 +1,6 @@
 import { db } from "./firebase";
 import * as logger from "firebase-functions/logger";
-import { ALLOWED_PLATFORMS, Platform } from "./validation";
+import { ALLOWED_PLATFORMS, Platform, isValidDocumentId } from "./validation";
 import { onPost } from "./http";
 
 export const token = onPost(async (req, res, uid) => {
@@ -12,6 +12,11 @@ export const token = onPost(async (req, res, uid) => {
     res
       .status(400)
       .send("Bad Request: 'installationId' is required and must be a string");
+    return;
+  }
+
+  if (!isValidDocumentId(installationId)) {
+    res.status(400).send("Bad Request: 'installationId' is invalid");
     return;
   }
 
@@ -28,8 +33,8 @@ export const token = onPost(async (req, res, uid) => {
   }
 
   try {
-    // Store/update the installation ID in Firestore keyed by caller's Firebase UID
-    const docId = uid;
+    // Store/update the installation ID in Firestore keyed by installationId
+    const docId = installationId;
     const tokenRef = db.collection("fcm_tokens").doc(docId);
 
     await tokenRef.set(
@@ -43,7 +48,7 @@ export const token = onPost(async (req, res, uid) => {
     );
 
     logger.info(
-      `Successfully registered installation ID for user ${uid}`,
+      `Successfully registered installation ID ${installationId} for user ${uid}`,
     );
     res.status(200).json({ success: true });
   } catch (error) {
@@ -51,3 +56,4 @@ export const token = onPost(async (req, res, uid) => {
     res.status(500).send("Internal Server Error");
   }
 });
+
