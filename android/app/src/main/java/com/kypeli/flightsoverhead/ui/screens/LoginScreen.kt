@@ -1,5 +1,6 @@
 package com.kypeli.flightsoverhead.ui.screens
 
+import android.content.res.Configuration
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -52,8 +53,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kypeli.flightsoverhead.ui.theme.FlightsOverheadTheme
+import com.kypeli.flightsoverhead.viewmodel.AuthUiState
 import com.kypeli.flightsoverhead.viewmodel.AuthViewModel
 
 @Composable
@@ -62,9 +66,30 @@ fun LoginScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var isSignUp by remember { mutableStateOf(false) }
+
+    LoginScreenContent(
+        uiState = uiState,
+        onSignIn = { email, password -> viewModel.signIn(email, password) },
+        onSignUp = { email, password -> viewModel.signUp(email, password) },
+        onClearError = { viewModel.clearError() },
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun LoginScreenContent(
+    uiState: AuthUiState,
+    onSignIn: (String, String) -> Unit,
+    onSignUp: (String, String) -> Unit,
+    onClearError: () -> Unit,
+    modifier: Modifier = Modifier,
+    initialEmail: String = "",
+    initialPassword: String = "",
+    initialIsSignUp: Boolean = false,
+) {
+    var email by remember { mutableStateOf(initialEmail) }
+    var password by remember { mutableStateOf(initialPassword) }
+    var isSignUp by remember { mutableStateOf(initialIsSignUp) }
     var passwordVisible by remember { mutableStateOf(false) }
 
     // Validation
@@ -157,7 +182,7 @@ fun LoginScreen(
                         value = email,
                         onValueChange = {
                             email = it
-                            viewModel.clearError()
+                            onClearError()
                         },
                         label = { Text("Email Address") },
                         leadingIcon = {
@@ -180,7 +205,7 @@ fun LoginScreen(
                         value = password,
                         onValueChange = {
                             password = it
-                            viewModel.clearError()
+                            onClearError()
                         },
                         label = { Text("Password (min 6 chars)") },
                         leadingIcon = {
@@ -206,12 +231,9 @@ fun LoginScreen(
                                 onDone = {
                                     if (canSubmit) {
                                         if (isSignUp) {
-                                            viewModel.signUp(
-                                                email,
-                                                password,
-                                            )
+                                            onSignUp(email, password)
                                         } else {
-                                            viewModel.signIn(email, password)
+                                            onSignIn(email, password)
                                         }
                                     }
                                 },
@@ -232,9 +254,9 @@ fun LoginScreen(
                         Button(
                             onClick = {
                                 if (isSignUp) {
-                                    viewModel.signUp(email, password)
+                                    onSignUp(email, password)
                                 } else {
-                                    viewModel.signIn(email, password)
+                                    onSignIn(email, password)
                                 }
                             },
                             enabled = canSubmit,
@@ -262,7 +284,7 @@ fun LoginScreen(
                     TextButton(
                         onClick = {
                             isSignUp = !isSignUp
-                            viewModel.clearError()
+                            onClearError()
                         },
                         enabled = !uiState.isLoading,
                     ) {
@@ -306,5 +328,101 @@ fun LoginScreen(
                 }
             }
         }
+    }
+}
+
+@Preview(
+    name = "Phone light",
+    showBackground = true,
+    widthDp = 412,
+    heightDp = 840,
+)
+@Composable
+fun LoginScreenPreview() {
+    FlightsOverheadTheme {
+        LoginScreenContent(
+            uiState = AuthUiState(),
+            onSignIn = { _, _ -> },
+            onSignUp = { _, _ -> },
+            onClearError = {},
+        )
+    }
+}
+
+@Preview(
+    name = "Phone dark",
+    showBackground = true,
+    widthDp = 412,
+    heightDp = 840,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+)
+@Composable
+fun LoginScreenDarkPreview() {
+    FlightsOverheadTheme {
+        LoginScreenContent(
+            uiState = AuthUiState(),
+            onSignIn = { _, _ -> },
+            onSignUp = { _, _ -> },
+            onClearError = {},
+        )
+    }
+}
+
+@Preview(
+    name = "Sign Up mode",
+    showBackground = true,
+    widthDp = 412,
+    heightDp = 840,
+)
+@Composable
+fun LoginScreenSignUpPreview() {
+    FlightsOverheadTheme {
+        LoginScreenContent(
+            uiState = AuthUiState(),
+            onSignIn = { _, _ -> },
+            onSignUp = { _, _ -> },
+            onClearError = {},
+            initialIsSignUp = true,
+        )
+    }
+}
+
+@Preview(
+    name = "Loading",
+    showBackground = true,
+    widthDp = 412,
+    heightDp = 840,
+)
+@Composable
+fun LoginScreenLoadingPreview() {
+    FlightsOverheadTheme {
+        LoginScreenContent(
+            uiState = AuthUiState(isLoading = true),
+            onSignIn = { _, _ -> },
+            onSignUp = { _, _ -> },
+            onClearError = {},
+            initialEmail = "user@example.com",
+            initialPassword = "password123",
+        )
+    }
+}
+
+@Preview(
+    name = "Error",
+    showBackground = true,
+    widthDp = 412,
+    heightDp = 840,
+)
+@Composable
+fun LoginScreenErrorPreview() {
+    FlightsOverheadTheme {
+        LoginScreenContent(
+            uiState = AuthUiState(error = "Invalid email address or password."),
+            onSignIn = { _, _ -> },
+            onSignUp = { _, _ -> },
+            onClearError = {},
+            initialEmail = "user@example.com",
+            initialPassword = "wrongpassword",
+        )
     }
 }
