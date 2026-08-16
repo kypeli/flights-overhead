@@ -20,7 +20,7 @@ The `flights-overhead` project is an end-to-end flight tracking system. It conne
     * `text/tabwriter` for clean console dashboards.
     * `net/http` for the embedded web dashboard, SSE broker, and outbound API calls to adsbdb.com.
 * **Firebase Functions**: Node.js 22, TypeScript, [firebase-functions](https://www.npmjs.com/package/firebase-functions) v2 SDK.
-* **Android Mobile App**: Kotlin, Jetpack Compose Material 3, Navigation3, Metro DI, Ktor Client (OkHttp engine), Firebase Auth, Coil.
+* **Android Mobile App**: Kotlin, Jetpack Compose Material 3, Navigation3, Metro DI, Ktor Client (OkHttp engine), Firebase Auth, Firebase Messaging, Firebase Installations, Coil.
 * **External HTTP API**: [adsbdb.com](https://api.adsbdb.com/v0) — queried at runtime for aircraft metadata (manufacturer, registration, owner) and flight route (origin/destination airports) via `/aircraft/{hex}` and `/callsign/{callsign}` endpoints. Calls are rate-limited (max 2 req/s) and in-memory cached.
 
 ---
@@ -79,8 +79,8 @@ flights-overhead/
 │           ├── firebase.ts        # Admin SDK initialization & config (maxInstances: 10)
 │           ├── http.ts            # Authenticated HTTP method helpers (CORS, GET/POST enforce, ID token verify)
 │           ├── flights.ts         # GET /overheadFlights endpoint handler
-│           ├── token.ts           # FCM token registration endpoint
-│           ├── validation.ts      # Client deviceId & platform validation rules
+│           ├── token.ts           # Firebase Installation ID registration endpoint
+│           ├── validation.ts      # Document ID & platform validation rules
 │           └── push-notification.ts # Scaffold for future push notification triggers
 └── android/                       # Native Android client (Jetpack Compose & Kotlin)
     ├── build.gradle.kts           # Root Gradle build configuration
@@ -90,12 +90,13 @@ flights-overhead/
         └── src/main/java/com/kypeli/flightsoverhead/
             ├── FlightsOverheadApplication.kt # Application class & DI initialization
             ├── MainActivity.kt    # Single activity hosting Compose Navigation3
-            ├── api/               # Ktor HTTP client & DTO definitions
+            ├── api/               # Ktor HTTP client & DTO definitions (FlightsApi, TokenApi)
             ├── data/              # Data models and airline resolver
             ├── di/                # Metro dependency injection graphs and scopes
             ├── entity/            # Domain entities (e.g. FlightPath)
             ├── navigation/        # Navigation3 route entries
-            ├── repository/        # FlightsRepository and AuthRepository
+            ├── repository/        # FlightsRepository, AuthRepository, and TokenRepository
+            ├── service/           # FlightsFirebaseMessagingService & TokenService
             ├── ui/                # Jetpack Compose UI (screens, theme, components)
             └── viewmodel/         # FlightsViewModel and AuthViewModel
 ```
@@ -200,7 +201,7 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
 * Built and validated prior to deployment using the predeploy hooks configured in [cloud-functions/firebase.json](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/firebase.json) (`npm run lint` and `npm run build`).
 * **Endpoints**:
   * **`overheadFlights`** ([cloud-functions/functions/src/flights.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/flights.ts)): Authenticated `GET` endpoint returning active overhead flights from the `active_flights` Firestore collection.
-  * **`token`** ([cloud-functions/functions/src/token.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/token.ts)): Authenticated `POST` endpoint that registers/updates client Firebase Installation IDs (FIDs) in the `fcm_tokens` Firestore collection. Stores documents keyed by `installationId`, setting fields like `platform` ("android", "ios", "web"), `uid`, and `updatedAt`.
+  * **`token`** ([cloud-functions/functions/src/token.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/token.ts)): Authenticated `POST` endpoint that registers/updates client Firebase Installation IDs (FIDs) in the `fcm_tokens` Firestore collection. Stores documents keyed by authenticated user `uid`, setting fields like `installationId`, `platform` ("android", "ios", "web"), `uid`, and `updatedAt` (ISO 8601 string).
   * **`pushNotification`** ([cloud-functions/functions/src/push-notification.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/push-notification.ts)): Pre-configured endpoint scaffold for future push-notification features (currently returns HTTP 501 Not Implemented).
   * Handlers are wrapped by `onGet` / `onPost` ([cloud-functions/functions/src/http.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/http.ts)), enforcing CORS preflight, HTTP method verification, and Firebase ID Token validation in the `Authorization` header.
 
@@ -209,6 +210,8 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
 * Architecture: MVVM with reactive UI state and repository abstractions.
   * `FlightsViewModel` & `FlightsRepository`: Fetches real-time flight lists from the `overheadFlights` Cloud Function via Ktor HTTP Client.
   * `AuthViewModel` & `AuthRepository`: Manages Firebase Authentication state.
+  * `TokenRepository` & `TokenService`: Registers client Firebase Installation IDs (FIDs) with the backend on authentication lifecycle events.
+  * `FlightsFirebaseMessagingService`: Handles Firebase Cloud Messaging token refresh and incoming messages.
   * `AirlineResolver`: Parses operator and airline codes to resolve airline brand names and assets.
   * UI components: `FlightListScreen`, `FlightRow`, `FlightPathChip`, `EmptyState`, and `AuthenticationErrorState`.
 

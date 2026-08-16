@@ -177,8 +177,8 @@ flights-overhead/
 │           ├── firebase.ts    # Admin SDK initialization & options
 │           ├── http.ts        # Authenticated HTTP method helper (CORS, ID token validation)
 │           ├── flights.ts     # GET /overheadFlights endpoint handler
-│           ├── token.ts       # FCM token registration endpoint
-│           ├── validation.ts  # Device ID validation helper
+│           ├── token.ts       # Firebase Installation ID registration endpoint
+│           ├── validation.ts  # Document ID & platform validation helper
 │           └── push-notification.ts # Future push-notification scaffold
 └── android/                   # Native Android client
     ├── build.gradle.kts       # Android root Gradle configuration
@@ -191,7 +191,7 @@ The repository contains Firebase Cloud Functions (v2 API) written in TypeScript 
 
 ### Available Endpoints
 * **`overheadFlights` (Authenticated GET)**: Retrieves the current snapshot of active overhead flights directly from the `active_flights` Firestore collection.
-* **`token` (Authenticated POST)**: Registers/updates client Firebase Installation IDs (FIDs) in the `fcm_tokens` Firestore collection. Accepts `installationId` and optional `platform` (`android`, `ios`, `web`). Keyed by `installationId`.
+* **`token` (Authenticated POST)**: Registers/updates client Firebase Installation IDs (FIDs) in the `fcm_tokens` Firestore collection. Accepts `installationId` and optional `platform` (`android`, `ios`, `web`). Keyed by authenticated user `uid`.
 * **`pushNotification` (Authenticated POST)**: Scaffold for future push-notification logic (currently returns `501 Not Implemented`).
 
 All endpoints enforce SSL, CORS preflight, HTTP method constraints, and require a valid Firebase ID Token passed as a Bearer token in the `Authorization` header.
@@ -217,8 +217,8 @@ firebase deploy --only functions
 
 The companion Android mobile app lives in `android/` and is built with:
 * **Jetpack Compose Material 3** & **Navigation3** for reactive and modern UI.
-* **Ktor Client** for querying the `overheadFlights` Cloud Function endpoint.
-* **Firebase Auth** for user authentication and ID token handling.
+* **Ktor Client** for querying Cloud Function endpoints (`overheadFlights`, `token`).
+* **Firebase Auth, Messaging & Installations** for user authentication, FCM push notification handling, and client installation ID registration.
 * **Metro** for lightweight dependency injection.
 
 ### Building & Running
