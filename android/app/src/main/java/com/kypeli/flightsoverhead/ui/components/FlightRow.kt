@@ -116,13 +116,11 @@ private fun AltitudeAndModel(
     flight: Flight,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    Column(
         modifier =
             modifier
                 .fillMaxWidth()
                 .padding(top = 14.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
@@ -160,6 +158,7 @@ private fun AltitudeAndModel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp),
             )
         }
     }
