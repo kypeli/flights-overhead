@@ -124,6 +124,7 @@ describe("pushNotification endpoint (push-notification.ts)", () => {
         altitude: 4500,
         model: "A320",
         manufacturer: "Airbus",
+        operator: "Finnair",
         originIATA: "HEL",
         destIATA: "OUL",
       },
@@ -146,16 +147,18 @@ describe("pushNotification endpoint (push-notification.ts)", () => {
 
     assert.ok(msg);
     assert.deepStrictEqual(msg.tokens, ["token-1", "token-2"]);
-    assert.strictEqual(msg.notification.title, "Flight FIN123 Overhead");
-    assert.strictEqual(msg.notification.body, "FIN123 is 8.2 km away.");
+    assert.strictEqual(msg.notification.title, "Finnair • FIN123");
+    assert.strictEqual(msg.notification.body, "To OUL • 8.2 km away");
     assert.strictEqual(msg.data.hex, "4601F6");
     assert.strictEqual(msg.data.callsign, "FIN123");
+    assert.strictEqual(msg.data.operator, "Finnair");
     assert.strictEqual(msg.data.distanceKm, "8.2");
     assert.strictEqual(msg.data.altitude, "4500");
     assert.strictEqual(msg.data.model, "A320");
     assert.strictEqual(msg.data.manufacturer, "Airbus");
     assert.strictEqual(msg.data.origin, "HEL");
     assert.strictEqual(msg.data.destination, "OUL");
+    assert.strictEqual(msg.data.destIATA, "OUL");
   });
 
   it("handles fallback title and body when callsign and distance are omitted", async () => {

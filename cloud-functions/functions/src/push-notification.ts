@@ -22,6 +22,12 @@ export const pushNotification = onServicePost(async (req, res, caller) => {
     model,
     manufacturer,
     registration,
+    operator,
+    registeredOwner,
+    destCity,
+    destName,
+    originCity,
+    originName,
     originIATA,
     originICAO,
     destIATA,
@@ -51,16 +57,39 @@ export const pushNotification = onServicePost(async (req, res, caller) => {
       return;
     }
 
-    const title = typeof callsign === "string" && callsign.trim().length > 0 ?
-      `Flight ${callsign.trim()} Overhead` :
-      `Aircraft ${hex} Overhead`;
+    const flightNumber = typeof callsign === "string" && callsign.trim().length > 0 ?
+      callsign.trim() :
+      hex;
+
+    const op = (typeof operator === "string" && operator.trim().length > 0 ? operator.trim() : undefined) ||
+      (typeof registeredOwner === "string" && registeredOwner.trim().length > 0 ? registeredOwner.trim() : undefined);
+
+    const title = op ?
+      `${op} • ${flightNumber}` :
+      (typeof callsign === "string" && callsign.trim().length > 0 ?
+        `Flight ${flightNumber} Overhead` :
+        `Aircraft ${hex} Overhead`);
+
+    const dest = (typeof destCity === "string" && destCity.trim().length > 0 ? destCity.trim() : undefined) ||
+      (typeof destName === "string" && destName.trim().length > 0 ? destName.trim() : undefined) ||
+      (typeof destIATA === "string" && destIATA.trim().length > 0 ? destIATA.trim() : undefined) ||
+      (typeof destICAO === "string" && destICAO.trim().length > 0 ? destICAO.trim() : undefined);
 
     const distanceNum = typeof distanceKm === "number" ? distanceKm : undefined;
     const distanceText = distanceNum !== undefined ?
-      ` is ${distanceNum.toFixed(1)} km away.` :
-      " is nearby.";
+      `${distanceNum.toFixed(1)} km away` :
+      undefined;
 
-    const bodyText = `${(typeof callsign === "string" && callsign.trim()) || hex}${distanceText}`;
+    let bodyText = "";
+    if (dest && distanceText) {
+      bodyText = `To ${dest} • ${distanceText}`;
+    } else if (dest) {
+      bodyText = `To ${dest}`;
+    } else if (distanceText) {
+      bodyText = `${distanceText}`;
+    } else {
+      bodyText = `${flightNumber} is nearby.`;
+    }
 
     const dataPayload: Record<string, string> = {
       hex: String(hex),
@@ -71,10 +100,20 @@ export const pushNotification = onServicePost(async (req, res, caller) => {
     if (typeof model === "string") dataPayload.model = model;
     if (typeof manufacturer === "string") dataPayload.manufacturer = manufacturer;
     if (typeof registration === "string") dataPayload.registration = registration;
+    if (typeof operator === "string" && operator.length > 0) dataPayload.operator = operator;
+    if (typeof registeredOwner === "string" && registeredOwner.length > 0) {
+      dataPayload.registeredOwner = registeredOwner;
+    }
+    if (typeof originCity === "string" && originCity.length > 0) dataPayload.originCity = originCity;
+    if (typeof originName === "string" && originName.length > 0) dataPayload.originName = originName;
+    if (typeof destCity === "string" && destCity.length > 0) dataPayload.destCity = destCity;
+    if (typeof destName === "string" && destName.length > 0) dataPayload.destName = destName;
+    if (typeof destIATA === "string" && destIATA.length > 0) dataPayload.destIATA = destIATA;
+    if (typeof destICAO === "string" && destICAO.length > 0) dataPayload.destICAO = destICAO;
     const origin = (typeof originIATA === "string" && originIATA) || (typeof originICAO === "string" && originICAO);
     if (origin) dataPayload.origin = origin;
-    const dest = (typeof destIATA === "string" && destIATA) || (typeof destICAO === "string" && destICAO);
-    if (dest) dataPayload.destination = dest;
+    const destCode = (typeof destIATA === "string" && destIATA) || (typeof destICAO === "string" && destICAO);
+    if (destCode) dataPayload.destination = destCode;
 
     const messaging = getMessaging();
     const response = await messaging.sendEachForMulticast({
