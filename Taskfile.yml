@@ -85,3 +85,9 @@ tasks:
         dir: cloud-functions
         cmds:
             - npx -y firebase-tools@latest deploy --only functions
+
+    deploy-rules:
+        desc: Deploy Firestore security rules to production
+        dir: cloud-functions
+        cmds:
+            - npx -y firebase-tools@latest deploy --only firestore:rules
