@@ -52,3 +52,19 @@ func TestDistanceNM(t *testing.T) {
 		t.Errorf("Expected 0 distance when one coordinate is 0,0")
 	}
 }
+
+func TestDistanceKM(t *testing.T) {
+	// Helsinki coordinates: 60.1699, 24.9384
+	// Vantaa Airport coordinates: 60.3172, 24.9633
+	// Direct distance is approx 16.4 km
+	dist := DistanceKM(60.1699, 24.9384, 60.3172, 24.9633)
+	if math.Abs(dist-16.4) > 0.5 {
+		t.Errorf("DistanceKM(Helsinki, Vantaa) = %f; expected approx 16.4", dist)
+	}
+
+	// Distance with zero coordinates should return 0
+	if DistanceKM(0, 0, 60.1699, 24.9384) != 0 {
+		t.Errorf("Expected 0 distance when one coordinate is 0,0")
+	}
+}
+

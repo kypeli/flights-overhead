@@ -34,6 +34,33 @@ func DistanceNM(lat1, lon1, lat2, lon2 float64) float64 {
 	return earthRadiusNM * c
 }
 
+// DistanceKM calculates the distance between two coordinates in Kilometers using the Haversine formula.
+func DistanceKM(lat1, lon1, lat2, lon2 float64) float64 {
+	if (lat1 == 0 && lon1 == 0) || (lat2 == 0 && lon2 == 0) {
+		return 0
+	}
+
+	// Earth radius in kilometers
+	const earthRadiusKM = 6371.0
+
+	// Convert to radians
+	radLat1 := lat1 * math.Pi / 180
+	radLon1 := lon1 * math.Pi / 180
+	radLat2 := lat2 * math.Pi / 180
+	radLon2 := lon2 * math.Pi / 180
+
+	dLat := radLat2 - radLat1
+	dLon := radLon2 - radLon1
+
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(radLat1)*math.Cos(radLat2)*
+			math.Sin(dLon/2)*math.Sin(dLon/2)
+
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+
+	return earthRadiusKM * c
+}
+
 // TrackToDirection converts a track angle in degrees to a cardinal/ordinal direction string (e.g. N, NE, E, etc.).
 func TrackToDirection(track float64) string {
 	// Normalize to [0, 360)

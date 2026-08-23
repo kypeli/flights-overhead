@@ -34,6 +34,9 @@ type config struct {
 	firestoreProject string
 
 	firestoreCreds string
+
+	proximityKM         float64
+	pushNotificationURL string
 }
 
 // parseConfig parses all CLI flags and returns a populated config.
@@ -48,6 +51,9 @@ func parseConfig() config {
 
 	firestoreProjectFlag := flag.String("firestore-project", "", "Firebase Project ID for Firestore integration")
 	firestoreCredsFlag := flag.String("firestore-credentials", "", "path to the service account credentials JSON key file")
+
+	proximityKMFlag := flag.Float64("proximity-km", 15.0, "proximity distance threshold in kilometers for push notification alerts")
+	pushNotificationURLFlag := flag.String("push-notification-url", "https://pushnotification-g5q7shkmca-lz.a.run.app", "URL for the /pushNotification Cloud Function endpoint")
 
 	flag.Parse()
 
@@ -74,15 +80,17 @@ func parseConfig() config {
 	}
 
 	return config{
-		trackerAddr:      *trackerAddrFlag,
-		httpAddr:         *httpFlag,
-		expire:           *expireFlag,
-		report:           *reportFlag,
-		lat:              *latFlag,
-		lon:              *lonFlag,
-		debug:            *debugFlag,
-		firestoreProject: *firestoreProjectFlag,
-		firestoreCreds:   *firestoreCredsFlag,
+		trackerAddr:         *trackerAddrFlag,
+		httpAddr:            *httpFlag,
+		expire:              *expireFlag,
+		report:              *reportFlag,
+		lat:                 *latFlag,
+		lon:                 *lonFlag,
+		debug:               *debugFlag,
+		firestoreProject:    *firestoreProjectFlag,
+		firestoreCreds:      *firestoreCredsFlag,
+		proximityKM:         *proximityKMFlag,
+		pushNotificationURL: *pushNotificationURLFlag,
 	}
 }
 
@@ -173,6 +181,7 @@ func main() {
 	// Create receivers
 	sseReceiver := createSSEReceivers(broker, cfg.lat, cfg.lon, cfg.trackerAddr)
 	firestoreReceiver := createFirestoreReceiver(ctx, firestoreClient)
+	pushReceiver := createPushNotificationReceiver(ctx, cfg.lat, cfg.lon, cfg.proximityKM, cfg.pushNotificationURL)
 
 	slog.Info("listening for incoming messages...")
 
@@ -211,6 +220,7 @@ func main() {
 			flightsReceivers := []broadcast.FlightsReceiver{
 				sseReceiver,
 				firestoreReceiver,
+				pushReceiver,
 			}
 
 			for _, r := range flightsReceivers {
@@ -226,4 +236,13 @@ func createSSEReceivers(broker *frontend.SSEBroker, lat, lon float64, trackerAdd
 
 func createFirestoreReceiver(ctx context.Context, client *firestore.Client) *broadcast.FirestoreFlightsReceiver {
 	return broadcast.NewFirestoreFlightsReceiver(ctx, client)
+}
+
+func createPushNotificationReceiver(ctx context.Context, lat, lon, proximityKM float64, endpointURL string) *broadcast.PushNotificationReceiver {
+	return broadcast.NewPushNotificationReceiver(ctx, broadcast.PushReceiverConfig{
+		BaseLat:              lat,
+		BaseLon:              lon,
+		ProximityThresholdKM: proximityKM,
+		EndpointURL:          endpointURL,
+	})
 }
