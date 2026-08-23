@@ -44,7 +44,7 @@ class FlightsViewModel(
                     }
                 }.onSuccess { flights ->
                     _uiState.update {
-                        it.copy(flights = flights)
+                        it.copy(flights = flights, error = null)
                     }
                 }.onFailure {
                     _uiState.update {
