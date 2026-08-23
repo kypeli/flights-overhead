@@ -1,0 +1,25 @@
+[Unit]
+Description=Flights Overhead Server
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi
+# Update the flags below with your actual tracker IP, coordinates, project ID, and credentials path
+ExecStart=/home/pi/flights-overhead \
+  -tracker-addr="127.0.0.1:30003" \
+  -http="0.0.0.0:8080" \
+  -lat="60.171949923322806" \
+  -lon="24.941411987576075" \
+  -proximity-km="15.0" \
+  -push-notification-url="https://<fill in cloud function endpoint>" \
+  -firestore-project="<fill in project name>" \
+  -firestore-credentials="/home/pi/service-account-key.json"
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
