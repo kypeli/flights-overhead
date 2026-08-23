@@ -70,10 +70,11 @@ export const pushNotification = onServicePost(async (req, res, caller) => {
         `Flight ${flightNumber} Overhead` :
         `Aircraft ${hex} Overhead`);
 
-    const dest = (typeof destCity === "string" && destCity.trim().length > 0 ? destCity.trim() : undefined) ||
-      (typeof destName === "string" && destName.trim().length > 0 ? destName.trim() : undefined) ||
-      (typeof destIATA === "string" && destIATA.trim().length > 0 ? destIATA.trim() : undefined) ||
-      (typeof destICAO === "string" && destICAO.trim().length > 0 ? destICAO.trim() : undefined);
+    const originLocation = (typeof originCity === "string" &&
+      originCity.trim().length > 0 ? originCity.trim() : undefined) ||
+      (typeof originName === "string" && originName.trim().length > 0 ? originName.trim() : undefined) ||
+      (typeof originIATA === "string" && originIATA.trim().length > 0 ? originIATA.trim() : undefined) ||
+      (typeof originICAO === "string" && originICAO.trim().length > 0 ? originICAO.trim() : undefined);
 
     const distanceNum = typeof distanceKm === "number" ? distanceKm : undefined;
     const distanceText = distanceNum !== undefined ?
@@ -81,10 +82,10 @@ export const pushNotification = onServicePost(async (req, res, caller) => {
       undefined;
 
     let bodyText = "";
-    if (dest && distanceText) {
-      bodyText = `To ${dest} • ${distanceText}`;
-    } else if (dest) {
-      bodyText = `To ${dest}`;
+    if (originLocation && distanceText) {
+      bodyText = `From ${originLocation} • ${distanceText}`;
+    } else if (originLocation) {
+      bodyText = `From ${originLocation}`;
     } else if (distanceText) {
       bodyText = `${distanceText}`;
     } else {
@@ -106,6 +107,8 @@ export const pushNotification = onServicePost(async (req, res, caller) => {
     }
     if (typeof originCity === "string" && originCity.length > 0) dataPayload.originCity = originCity;
     if (typeof originName === "string" && originName.length > 0) dataPayload.originName = originName;
+    if (typeof originIATA === "string" && originIATA.length > 0) dataPayload.originIATA = originIATA;
+    if (typeof originICAO === "string" && originICAO.length > 0) dataPayload.originICAO = originICAO;
     if (typeof destCity === "string" && destCity.length > 0) dataPayload.destCity = destCity;
     if (typeof destName === "string" && destName.length > 0) dataPayload.destName = destName;
     if (typeof destIATA === "string" && destIATA.length > 0) dataPayload.destIATA = destIATA;

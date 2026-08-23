@@ -18,9 +18,7 @@ object FlightsNotificationManager {
     const val EXTRA_NOTIFICATION_ID = "com.kypeli.flightsoverhead.EXTRA_NOTIFICATION_ID"
     const val EXTRA_HEX = "com.kypeli.flightsoverhead.EXTRA_HEX"
 
-    fun getNotificationId(hex: String): Int {
-        return hex.trim().uppercase(Locale.US).hashCode()
-    }
+    fun getNotificationId(hex: String): Int = hex.trim().uppercase(Locale.US).hashCode()
 
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -51,11 +49,11 @@ object FlightsNotificationManager {
         return operator ?: owner ?: airline
     }
 
-    fun extractDestination(data: Map<String, String>): String? {
-        val city = data["destCity"]?.trim()?.takeIf { it.isNotEmpty() }
-        val iata = (data["destIATA"] ?: data["destination"])?.trim()?.takeIf { it.isNotEmpty() }
-        val icao = data["destICAO"]?.trim()?.takeIf { it.isNotEmpty() }
-        val name = data["destName"]?.trim()?.takeIf { it.isNotEmpty() }
+    fun extractOrigin(data: Map<String, String>): String? {
+        val city = data["originCity"]?.trim()?.takeIf { it.isNotEmpty() }
+        val iata = (data["originIATA"] ?: data["origin"])?.trim()?.takeIf { it.isNotEmpty() }
+        val icao = data["originICAO"]?.trim()?.takeIf { it.isNotEmpty() }
+        val name = data["originName"]?.trim()?.takeIf { it.isNotEmpty() }
 
         return when {
             city != null && iata != null && !city.equals(iata, ignoreCase = true) -> "$city ($iata)"
@@ -121,14 +119,14 @@ object FlightsNotificationManager {
             return customBody
         }
 
-        val destination = extractDestination(data)
+        val origin = extractOrigin(data)
         val distance = extractDistanceText(data)
 
-        if (destination != null && distance != null) {
-            return "To $destination • $distance"
+        if (origin != null && distance != null) {
+            return "From $origin • $distance"
         }
-        if (destination != null) {
-            return "To $destination"
+        if (origin != null) {
+            return "From $origin"
         }
         if (distance != null) {
             val subject = extractFlightNumber(data) ?: "Aircraft"
@@ -148,23 +146,26 @@ object FlightsNotificationManager {
     ): String {
         val operator = extractOperator(data)
         val flightNumber = extractFlightNumber(data)
-        val destination = extractDestination(data)
+        val origin = extractOrigin(data)
         val distance = extractDistanceText(data)
 
-        if (operator == null && flightNumber == null && destination == null && distance == null) {
+        if (operator == null && flightNumber == null && origin == null && distance == null) {
             return body
         }
 
         val parts = mutableListOf<String>()
         if (operator != null) parts.add("Operator: $operator")
         if (flightNumber != null) parts.add("Flight: $flightNumber")
-        if (destination != null) parts.add("Destination: $destination")
+        if (origin != null) parts.add("Origin: $origin")
         if (distance != null) parts.add("Distance: $distance")
 
         return parts.joinToString("\n")
     }
 
-    fun cancelNotification(context: Context, intent: Intent?) {
+    fun cancelNotification(
+        context: Context,
+        intent: Intent?,
+    ) {
         if (intent == null) return
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, -1)
         val hex = intent.getStringExtra(EXTRA_HEX) ?: intent.getStringExtra("hex")
@@ -180,7 +181,10 @@ object FlightsNotificationManager {
         }
     }
 
-    fun cancelNotificationForHex(context: Context, hex: String) {
+    fun cancelNotificationForHex(
+        context: Context,
+        hex: String,
+    ) {
         if (hex.isBlank()) return
         val notificationId = getNotificationId(hex)
         try {
@@ -191,7 +195,10 @@ object FlightsNotificationManager {
         }
     }
 
-    fun cancelNotificationsForInactiveFlights(context: Context, activeHexes: Collection<String>) {
+    fun cancelNotificationsForInactiveFlights(
+        context: Context,
+        activeHexes: Collection<String>,
+    ) {
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
         val normalizedActive =
@@ -204,7 +211,11 @@ object FlightsNotificationManager {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && notification.channelId != CHANNEL_ID) {
                     continue
                 }
-                val hex = notification.extras?.getString("hex")?.trim()?.uppercase(Locale.US)
+                val hex =
+                    notification.extras
+                        ?.getString("hex")
+                        ?.trim()
+                        ?.uppercase(Locale.US)
                 if (hex != null && !normalizedActive.contains(hex)) {
                     notificationManager.cancel(sbn.tag, sbn.id)
                     Timber.d("Dismissed notification for inactive flight hex: %s (id: %d)", hex, sbn.id)
@@ -251,7 +262,8 @@ object FlightsNotificationManager {
         val bigText = extractBigText(body, data)
 
         val notification =
-            NotificationCompat.Builder(context, CHANNEL_ID)
+            NotificationCompat
+                .Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.outline_line_end_arrow_notch_24)
                 .setContentTitle(title)
                 .setContentText(body)
@@ -261,12 +273,13 @@ object FlightsNotificationManager {
                 .setAutoCancel(true)
                 .apply {
                     if (rawHex != null) {
-                        addExtras(android.os.Bundle().apply {
-                            putString("hex", rawHex)
-                        })
+                        addExtras(
+                            android.os.Bundle().apply {
+                                putString("hex", rawHex)
+                            },
+                        )
                     }
-                }
-                .build()
+                }.build()
 
         try {
             NotificationManagerCompat.from(context).notify(notificationId, notification)

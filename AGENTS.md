@@ -234,7 +234,7 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
 * Native Android client developed in Kotlin with Jetpack Compose Material 3 and Navigation3.
 * Architecture: MVVM with reactive UI state and repository abstractions.
   * **`FlightsRepository` & Real-Time Firestore Streaming**: Uses Firestore's `addSnapshotListener` on `active_flights` exposed as a Kotlin coroutines `Flow<Result<List<Flight>>>` via `callbackFlow`. Automatically streams live flight movements and deletions directly to the UI without polling.
-  * **`FlightsNotificationManager`**: Handles notification channel creation (`flights_overhead_channel`), rich notification layout formatting (`Operator • Callsign`, `To Destination • X.X km away`), `BigTextStyle` multi-line expansion, and automatic dismissal on tap.
+  * **`FlightsNotificationManager`**: Handles notification channel creation (`flights_overhead_channel`), rich notification layout formatting (`Operator • Callsign`, `From Origin • X.X km away`), `BigTextStyle` multi-line expansion, and automatic dismissal on tap.
   * **`FlightsFirebaseMessagingService`**: Receives incoming FCM messages, extracts telemetry, and delegates display to `FlightsNotificationManager`.
   * **`TokenRepository` & `TokenService`**: Collects hardware device metadata (`DeviceInfoDto`) and registers client Firebase Installation IDs with the backend.
   * **`FlightRow` Component**: Renders live telemetry cards with airline avatar / fallback initials, flight number, origin/destination airport code badges, flight path status chips (Climbing, Descending, Cruising based on vertical rate), altitude in meters, distance in km, heading, model description, registration, squawk, and ICAO hex code.

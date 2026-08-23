@@ -148,7 +148,7 @@ describe("pushNotification endpoint (push-notification.ts)", () => {
     assert.ok(msg);
     assert.deepStrictEqual(msg.tokens, ["token-1", "token-2"]);
     assert.strictEqual(msg.notification.title, "Finnair • FIN123");
-    assert.strictEqual(msg.notification.body, "To OUL • 8.2 km away");
+    assert.strictEqual(msg.notification.body, "From HEL • 8.2 km away");
     assert.strictEqual(msg.data.hex, "4601F6");
     assert.strictEqual(msg.data.callsign, "FIN123");
     assert.strictEqual(msg.data.operator, "Finnair");
@@ -157,6 +157,7 @@ describe("pushNotification endpoint (push-notification.ts)", () => {
     assert.strictEqual(msg.data.model, "A320");
     assert.strictEqual(msg.data.manufacturer, "Airbus");
     assert.strictEqual(msg.data.origin, "HEL");
+    assert.strictEqual(msg.data.originIATA, "HEL");
     assert.strictEqual(msg.data.destination, "OUL");
     assert.strictEqual(msg.data.destIATA, "OUL");
   });

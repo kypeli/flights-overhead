@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class FlightsNotificationManagerTest {
-
     @Test
     fun extractFlightNumber_prefersCallsignThenFlightNumberThenHex() {
         val withCallsign = mapOf("callsign" to "AY1337", "flightNumber" to "FN999", "hex" to "4601F6")
@@ -30,28 +29,29 @@ class FlightsNotificationManagerTest {
     }
 
     @Test
-    fun extractDestination_formatsCityAndIataCode() {
-        val withCityAndIata = mapOf("destCity" to "Tokyo", "destIATA" to "NRT")
-        assertEquals("Tokyo (NRT)", FlightsNotificationManager.extractDestination(withCityAndIata))
+    fun extractOrigin_formatsCityAndIataCode() {
+        val withCityAndIata = mapOf("originCity" to "Helsinki", "originIATA" to "HEL")
+        assertEquals("Helsinki (HEL)", FlightsNotificationManager.extractOrigin(withCityAndIata))
 
-        val withCityOnly = mapOf("destCity" to "London")
-        assertEquals("London", FlightsNotificationManager.extractDestination(withCityOnly))
+        val withCityOnly = mapOf("originCity" to "London")
+        assertEquals("London", FlightsNotificationManager.extractOrigin(withCityOnly))
 
-        val withIataOnly = mapOf("destIATA" to "JFK")
-        assertEquals("JFK", FlightsNotificationManager.extractDestination(withIataOnly))
+        val withIataOnly = mapOf("originIATA" to "JFK")
+        assertEquals("JFK", FlightsNotificationManager.extractOrigin(withIataOnly))
 
-        val withDestinationFallback = mapOf("destination" to "OUL")
-        assertEquals("OUL", FlightsNotificationManager.extractDestination(withDestinationFallback))
+        val withOriginFallback = mapOf("origin" to "OUL")
+        assertEquals("OUL", FlightsNotificationManager.extractOrigin(withOriginFallback))
     }
 
     @Test
     fun extractNotificationTitle_formatsOperatorAndFlightNumber() {
-        val data = mapOf(
-            "operator" to "Finnair",
-            "callsign" to "AY1337",
-            "destCity" to "Tokyo",
-            "distanceKm" to "3.5",
-        )
+        val data =
+            mapOf(
+                "operator" to "Finnair",
+                "callsign" to "AY1337",
+                "originCity" to "Helsinki",
+                "distanceKm" to "3.5",
+            )
         val title = FlightsNotificationManager.extractNotificationTitle(null, data)
         assertEquals("Finnair • AY1337", title)
     }
@@ -77,18 +77,19 @@ class FlightsNotificationManagerTest {
     }
 
     @Test
-    fun extractNotificationBody_formatsDestinationAndDistance() {
-        val data = mapOf(
-            "destCity" to "Tokyo",
-            "destIATA" to "NRT",
-            "distanceKm" to "3.48",
-        )
+    fun extractNotificationBody_formatsOriginAndDistance() {
+        val data =
+            mapOf(
+                "originCity" to "Helsinki",
+                "originIATA" to "HEL",
+                "distanceKm" to "3.48",
+            )
         val body = FlightsNotificationManager.extractNotificationBody(null, data)
-        assertEquals("To Tokyo (NRT) • 3.5 km away", body)
+        assertEquals("From Helsinki (HEL) • 3.5 km away", body)
     }
 
     @Test
-    fun extractNotificationBody_formatsDistanceWhenDestinationMissing() {
+    fun extractNotificationBody_formatsDistanceWhenOriginMissing() {
         val data = mapOf("callsign" to "AY1337", "distanceKm" to "5.21")
         val body = FlightsNotificationManager.extractNotificationBody(null, data)
         assertEquals("AY1337 is 5.2 km away.", body)
@@ -102,20 +103,22 @@ class FlightsNotificationManagerTest {
 
     @Test
     fun extractBigText_containsAllFourDetails() {
-        val data = mapOf(
-            "operator" to "Finnair",
-            "callsign" to "AY1337",
-            "destCity" to "Tokyo",
-            "destIATA" to "NRT",
-            "distanceKm" to "3.5",
-        )
+        val data =
+            mapOf(
+                "operator" to "Finnair",
+                "callsign" to "AY1337",
+                "originCity" to "Helsinki",
+                "originIATA" to "HEL",
+                "distanceKm" to "3.5",
+            )
         val bigText = FlightsNotificationManager.extractBigText("Default body", data)
-        val expected = """
+        val expected =
+            """
             Operator: Finnair
             Flight: AY1337
-            Destination: Tokyo (NRT)
+            Origin: Helsinki (HEL)
             Distance: 3.5 km away
-        """.trimIndent()
+            """.trimIndent()
         assertEquals(expected, bigText)
     }
 
