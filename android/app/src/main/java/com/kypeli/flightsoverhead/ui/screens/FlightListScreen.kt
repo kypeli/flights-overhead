@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -24,8 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kypeli.flightsoverhead.data.model.Flight
 import com.kypeli.flightsoverhead.ui.components.AuthenticationErrorState
@@ -44,15 +41,10 @@ fun FlightListScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        viewModel.refresh()
-    }
-
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
             FlightListTopAppBar(
-                onRefresh = { viewModel.refresh() },
                 onSignOut = onSignOut,
             )
         },
@@ -72,7 +64,6 @@ fun FlightListScreen(
             FlightsScreenContent(
                 flights = uiState.flights,
                 modifier = Modifier.padding(innerPadding),
-                onRefresh = { viewModel.refresh() },
             )
         }
     }
@@ -82,12 +73,10 @@ fun FlightListScreen(
 private fun FlightsScreenContent(
     flights: List<Flight>,
     modifier: Modifier = Modifier,
-    onRefresh: () -> Unit = {},
 ) {
     if (flights.isEmpty()) {
         EmptyState(
             modifier = modifier,
-            onRefresh = onRefresh,
         )
     } else {
         LazyColumn(
@@ -107,7 +96,6 @@ private fun FlightsScreenContent(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FlightListTopAppBar(
-    onRefresh: () -> Unit,
     onSignOut: () -> Unit,
 ) {
     TopAppBar(
@@ -125,12 +113,6 @@ private fun FlightListTopAppBar(
             }
         },
         actions = {
-            IconButton(onClick = onRefresh) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Refresh",
-                )
-            }
             IconButton(onClick = onSignOut) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ExitToApp,
@@ -213,7 +195,7 @@ fun FlightListScreenPreview() {
     FlightsOverheadTheme {
         Scaffold(
             topBar = {
-                FlightListTopAppBar(onRefresh = {}, onSignOut = {})
+                FlightListTopAppBar(onSignOut = {})
             },
             containerColor = MaterialTheme.colorScheme.background,
         ) { innerPadding ->
@@ -263,7 +245,7 @@ fun FlightListScreenTabletPreview() {
     FlightsOverheadTheme {
         Scaffold(
             topBar = {
-                FlightListTopAppBar(onRefresh = {}, onSignOut = {})
+                FlightListTopAppBar(onSignOut = {})
             },
             containerColor = MaterialTheme.colorScheme.background,
         ) { innerPadding ->

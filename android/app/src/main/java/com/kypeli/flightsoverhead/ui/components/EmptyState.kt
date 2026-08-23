@@ -1,5 +1,6 @@
 package com.kypeli.flightsoverhead.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,11 +9,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AirplanemodeInactive
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -26,7 +25,6 @@ import com.kypeli.flightsoverhead.ui.theme.FlightsOverheadTheme
 
 @Composable
 fun EmptyState(
-    onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -56,25 +54,18 @@ fun EmptyState(
         }
         Spacer(modifier = Modifier.height(28.dp))
         Text(
-            text = "No Flights Found",
+            text = "No Flights Overhead",
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "There are no flights currently being tracked in your vicinity. Try refreshing to search again.",
+            text = "There are no flights currently detected in your vicinity. Live updates will appear here automatically as aircraft fly overhead.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        Spacer(modifier = Modifier.height(28.dp))
-        Button(
-            onClick = onRefresh,
-            shape = MaterialTheme.shapes.large,
-        ) {
-            Text(text = "Start Tracking")
-        }
     }
 }
 
@@ -82,6 +73,6 @@ fun EmptyState(
 @Composable
 fun EmptyStatePreview() {
     FlightsOverheadTheme {
-        EmptyState(onRefresh = {})
+        EmptyState()
     }
 }
