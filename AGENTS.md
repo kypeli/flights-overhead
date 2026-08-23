@@ -201,9 +201,8 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
 * Built and validated prior to deployment using the predeploy hooks configured in [cloud-functions/firebase.json](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/firebase.json) (`npm run lint` and `npm run build`).
 * **Endpoints**:
   * **`overheadFlights`** ([cloud-functions/functions/src/flights.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/flights.ts)): Authenticated `GET` endpoint returning active overhead flights from the `active_flights` Firestore collection.
-  * **`token`** ([cloud-functions/functions/src/token.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/token.ts)): Authenticated `POST` endpoint that registers/updates client Firebase Installation IDs (FIDs) in the `fcm_tokens` Firestore collection. Stores documents keyed by `installationId`, setting fields like `installationId`, `platform` ("android", "ios", "web"), `uid`, and `updatedAt` (ISO 8601 string).
-  * **`pushNotification`** ([cloud-functions/functions/src/push-notification.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/push-notification.ts)): Pre-configured endpoint scaffold for future push-notification features (currently returns HTTP 501 Not Implemented).
-  * Handlers are wrapped by `onGet` / `onPost` ([cloud-functions/functions/src/http.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/http.ts)), enforcing CORS preflight, HTTP method verification, and Firebase ID Token validation in the `Authorization` header.
+  * **`pushNotification`** ([cloud-functions/functions/src/push-notification.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/push-notification.ts)): Service-authenticated `POST` endpoint invoked by the Go backend tracker to multicast FCM push notifications to registered devices when an aircraft is within proximity.
+  * Handlers are wrapped by `onGet` / `onPost` for Firebase ID Token validation (`overheadFlights`, `token`) or `onServicePost` for Google Service Account OIDC ID Token validation (`pushNotification`), with CORS preflight and HTTP method verification.
 
 ### 11. Android Mobile Client (`android/`)
 * Native Android client developed in Kotlin with Jetpack Compose Material 3 and Navigation3.

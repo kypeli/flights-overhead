@@ -2,25 +2,29 @@ import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import "../lib/firebase.js";
 import { pushNotification } from "../lib/push-notification.js";
-import { getAuth } from "firebase-admin/auth";
+import { oauth2Client } from "../lib/http.js";
 import { getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { createMockRequest, MockResponse, asResponse } from "./helpers.ts";
 
 describe("pushNotification endpoint (push-notification.ts)", () => {
-  const auth = getAuth();
   const db = getFirestore();
   const messaging = getMessaging();
 
   beforeEach(() => {
-    auth.verifyIdToken = (async (idToken: string) => {
-      if (idToken === "valid-token") {
-        return { uid: "user-push-test" } as unknown as ReturnType<typeof auth.verifyIdToken> extends Promise<infer U>
+    oauth2Client.verifyIdToken = (async (options: { idToken: string; audience?: string | string[] }) => {
+      if (options.idToken === "valid-token") {
+        return {
+          getPayload: () => ({
+            email: "service-account@flights-overhead.iam.gserviceaccount.com",
+            sub: "sa-12345",
+          }),
+        } as unknown as ReturnType<typeof oauth2Client.verifyIdToken> extends Promise<infer U>
           ? U
           : never;
       }
       throw new Error("Invalid ID token");
-    }) as typeof auth.verifyIdToken;
+    }) as typeof oauth2Client.verifyIdToken;
   });
 
   it("rejects non-POST methods with 405 Method Not Allowed", async () => {

@@ -189,12 +189,11 @@ flights-overhead/
 
 The repository contains Firebase Cloud Functions (v2 API) written in TypeScript to support client queries and push notifications.
 
-### Available Endpoints
 * **`overheadFlights` (Authenticated GET)**: Retrieves the current snapshot of active overhead flights directly from the `active_flights` Firestore collection.
 * **`token` (Authenticated POST)**: Registers/updates client Firebase Installation IDs (FIDs) in the `fcm_tokens` Firestore collection. Accepts `installationId` and optional `platform` (`android`, `ios`, `web`). Keyed by `installationId`.
-* **`pushNotification` (Authenticated POST)**: Scaffold for future push-notification logic (currently returns `501 Not Implemented`).
+* **`pushNotification` (Service-Authenticated POST)**: Dispatches proximity multicast push notifications to registered client devices. Authenticated via Google Service Account OIDC ID tokens.
 
-All endpoints enforce SSL, CORS preflight, HTTP method constraints, and require a valid Firebase ID Token passed as a Bearer token in the `Authorization` header.
+Client endpoints enforce SSL, CORS preflight, HTTP method constraints, and require a valid Firebase ID Token (or Google Service Account OIDC ID Token for server endpoints) passed as a Bearer token in the `Authorization` header.
 
 ### Local Development (Emulators)
 To compile TypeScript and start the local Firebase emulator for Functions:

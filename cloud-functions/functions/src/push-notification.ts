@@ -1,7 +1,7 @@
 import * as logger from "firebase-functions/logger";
 import { getMessaging } from "firebase-admin/messaging";
 import { db } from "./firebase";
-import { onPost } from "./http";
+import { onServicePost } from "./http";
 
 /**
  * POST /pushNotification
@@ -9,8 +9,10 @@ import { onPost } from "./http";
  * Dispatches a push notification to all registered client devices
  * when a flight enters the configured proximity zone.
  */
-export const pushNotification = onPost(async (req, res, uid) => {
-  logger.info(`pushNotification endpoint invoked by caller ${uid}`);
+export const pushNotification = onServicePost(async (req, res, caller) => {
+  logger.info(
+    `pushNotification endpoint invoked by service caller ${caller.email || caller.sub}`,
+  );
   const body = (req.body ?? {}) as Record<string, unknown>;
   const {
     hex,

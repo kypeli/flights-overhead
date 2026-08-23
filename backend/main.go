@@ -21,6 +21,8 @@ import (
 	"flights-overhead/sbsfirestore"
 
 	"cloud.google.com/go/firestore"
+	"google.golang.org/api/idtoken"
+	"google.golang.org/api/option"
 )
 
 // config holds all runtime configuration parsed from CLI flags.
@@ -171,7 +173,7 @@ func main() {
 	broker := frontend.NewSSEBroker()
 	sseReceiver := createSSEReceivers(broker, cfg.lat, cfg.lon, cfg.trackerAddr)
 	firestoreReceiver := createFirestoreReceiver(ctx, firestoreClient)
-	pushReceiver := createPushNotificationReceiver(ctx, cfg.lat, cfg.lon, cfg.proximityKM, cfg.pushNotificationURL)
+	pushReceiver := createPushNotificationReceiver(ctx, cfg.lat, cfg.lon, cfg.proximityKM, cfg.pushNotificationURL, cfg.firestoreCreds)
 
 	// Launch embedded HTTP web server with the SSE broker and test push handler
 	httpHandler := frontend.NewHTTPHandler(broker, pushReceiver)
@@ -238,11 +240,25 @@ func createFirestoreReceiver(ctx context.Context, client *firestore.Client) *bro
 	return broadcast.NewFirestoreFlightsReceiver(ctx, client)
 }
 
-func createPushNotificationReceiver(ctx context.Context, lat, lon, proximityKM float64, endpointURL string) *broadcast.PushNotificationReceiver {
+func createPushNotificationReceiver(ctx context.Context, lat, lon, proximityKM float64, endpointURL, credsFile string) *broadcast.PushNotificationReceiver {
+	var httpClient *http.Client
+	if endpointURL != "" && credsFile != "" {
+		client, err := idtoken.NewClient(ctx, endpointURL, option.WithCredentialsFile(credsFile))
+		if err != nil {
+			slog.Warn("failed to create authenticated ID token client for push notifications, falling back to unauthenticated client",
+				"error", err,
+			)
+		} else {
+			httpClient = client
+			httpClient.Timeout = 10 * time.Second
+		}
+	}
+
 	return broadcast.NewPushNotificationReceiver(ctx, broadcast.PushReceiverConfig{
 		BaseLat:              lat,
 		BaseLon:              lon,
 		ProximityThresholdKM: proximityKM,
 		EndpointURL:          endpointURL,
+		HTTPClient:           httpClient,
 	})
 }
