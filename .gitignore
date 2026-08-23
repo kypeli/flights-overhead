@@ -4,6 +4,7 @@ android/app/google-services.json
 skills-lock.json
 .DS_Store
 backend/bin/*
+flights-overhead.service
 
 # Log files
 *.log
