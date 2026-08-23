@@ -32,5 +32,25 @@ class FlightsFirebaseMessagingService : FirebaseMessagingService() {
         remoteMessage.notification?.let {
             Timber.d("Message notification body: %s", it.body)
         }
+
+        val title =
+            FlightsNotificationManager.extractNotificationTitle(
+                notificationTitle = remoteMessage.notification?.title,
+                data = remoteMessage.data,
+                context = applicationContext,
+            )
+        val body =
+            FlightsNotificationManager.extractNotificationBody(
+                notificationBody = remoteMessage.notification?.body,
+                data = remoteMessage.data,
+                context = applicationContext,
+            )
+
+        FlightsNotificationManager.showFlightNotification(
+            context = applicationContext,
+            title = title,
+            body = body,
+            data = remoteMessage.data,
+        )
     }
 }

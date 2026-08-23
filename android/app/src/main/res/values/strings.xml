@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">Flights Overhead</string>
+    <string name="notification_channel_name">Flights Overhead</string>
+    <string name="notification_channel_description">Notifications when aircraft fly overhead</string>
+    <string name="notification_default_title">Flight Overhead</string>
+    <string name="notification_default_body">An aircraft is overhead.</string>
 </resources>

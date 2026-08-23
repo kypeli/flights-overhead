@@ -3,6 +3,7 @@ package com.kypeli.flightsoverhead
 import android.app.Application
 import com.kypeli.flightsoverhead.di.AppGraph
 import com.kypeli.flightsoverhead.di.ViewModelGraph
+import com.kypeli.flightsoverhead.service.FlightsNotificationManager
 import dev.zacsweers.metro.createGraphFactory
 import timber.log.Timber
 
@@ -17,6 +18,7 @@ class FlightsOverheadApplication : Application() {
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }
+        FlightsNotificationManager.createNotificationChannel(this)
         appGraph = createGraphFactory<AppGraph.Factory>().create(this)
         viewModelGraph = appGraph.createViewModelGraph()
         viewModelGraph.tokenService.startObserving()

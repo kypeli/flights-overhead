@@ -17,6 +17,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.FlightsOverhead"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -29,6 +30,14 @@
         <meta-data
             android:name="firebase_messaging_installation_id_enabled"
             android:value="true" />
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="flights_overhead_channel" />
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/outline_line_end_arrow_notch_24" />
 
         <service
             android:name=".service.FlightsFirebaseMessagingService"
