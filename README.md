@@ -1,6 +1,6 @@
 # ✈️ flights-overhead
 
-A lightweight ADS-B flight tracker that reads live aircraft transponder data from a local receiver, enriches it with aircraft and route metadata, and displays it across a real-time web dashboard and a companion Android mobile application.
+A lightweight ADS-B flight tracker that reads live aircraft transponder data from a local receiver, enriches it with aircraft and route metadata, and displays it across a real-time web dashboard and a companion Android mobile application with live telemetry streaming and proximity push notification alerts.
 
 ![Dashboard screenshot placeholder](https://placehold.co/900x400/0b1326/dae2fd?text=AeroTrack+Live+Dashboard)
 
@@ -11,7 +11,9 @@ Connect it to an ADS-B receiver (like a RTL-SDR dongle running `dump1090`) and i
 - 📡 Parse the raw **SBS-1 / BaseStation** TCP stream coming off your receiver
 - 🗂️ Track the state of every aircraft overhead — callsign, altitude, speed, heading, position, squawk
 - 🌐 Serve a live **web dashboard** at `http://localhost:8080` updated every second via Server-Sent Events
-- 📱 Provide live updates to a native **Android companion app** via Cloud Firestore and Cloud Functions
+- 📱 Stream real-time flight telemetry directly to a native **Android companion app** via Cloud Firestore snapshot listeners
+- 🔔 Dispatch **proximity push notification alerts** via Firebase Cloud Messaging (FCM) when an aircraft flies close overhead
+- 🧪 Provide a `/test-push` web endpoint to trigger and test on-demand push notifications to registered client devices
 - 🖥️ Print a terminal table of all active flights at a configurable interval
 - 🔁 Automatically expire aircraft that go silent and reconnect to the receiver if the connection drops
 - ✈️ Enrich each flight with aircraft type, registration, operator, and route (origin → destination) via live lookups against [adsbdb.com](https://www.adsbdb.com/)
@@ -22,8 +24,9 @@ Connect it to an ADS-B receiver (like a RTL-SDR dongle running `dump1090`) and i
 - An ADS-B receiver with `dump1090` (or equivalent) running and exposing a BaseStation TCP stream, typically on port `30003`
 - A Firebase / Cloud Firestore project with service account credentials configured.
 - (Optional) Android SDK / Android Studio for building the Android client.
+- (Optional) Raspberry Pi (Linux arm64) running systemd for dedicated headless tracking.
 
-Uses standard library components combined with the Cloud Firestore Go SDK to synchronize live flight snapshots to Firestore. Aircraft and route data is fetched live from [adsbdb.com](https://www.adsbdb.com/); an internet connection is required for those enrichments but not for core tracking.
+Uses standard library components combined with the Cloud Firestore Go SDK to synchronize live flight snapshots to Firestore. Aircraft and route data is fetched live from [adsbdb.com](https://www.adsbdb.com/); an internet connection is required for those enrichments and push notifications, but not for core local tracking.
 
 ## 🚀 Quick start
 
@@ -44,6 +47,7 @@ go run main.go \
   -tracker-addr "<tracker_ip>:30003" \
   -lat <latitude> \
   -lon <longitude> \
+  -proximity-km 15.0 \
   -firestore-project <firestore_project_id> \
   -firestore-credentials <credentials_json_path>
 ```
@@ -57,14 +61,16 @@ Then open `http://localhost:8080` in your browser to view the local dashboard, o
 | `-tracker-addr` | `localhost:30003` | ADS-B receiver TCP address `host:port` |
 | `-lat` | *(required)* | Receiver latitude — used for distance calculations |
 | `-lon` | *(required)* | Receiver longitude — used for distance calculations |
-| `-http` | `localhost:8080` | Address for the web dashboard |
+| `-http` | `localhost:8080` | Address for the web dashboard and test push endpoint |
 | `-expire` | `60s` | How long before a silent aircraft is dropped from state |
 | `-report` | `5s` | How often to print the terminal flight table |
+| `-proximity-km` | `15.0` | Proximity distance threshold in kilometers for push notification alerts |
+| `-push-notification-url` | `https://your-function-at-firebase-run.app` | URL for the `/pushNotification` Cloud Function endpoint |
 | `-debug` | `false` | Verbose per-line parser logging |
 | `-firestore-project` | *(required)* | Firebase Project ID for Firestore integration |
 | `-firestore-credentials` | *(required)* | Path to the service account credentials JSON key file |
 
-Example with custom receiver location and Firestore (run from `backend/`):
+Example with custom receiver location, proximity threshold, and Firestore (run from `backend/`):
 
 ```bash
 cd backend
@@ -72,12 +78,13 @@ go run main.go \
   -tracker-addr "<IP address of the ADS-B receiver>:30003" \
   -lat <latitude of ADS-B receiver> \
   -lon <longitude of ADS-B receiver> \
+  -proximity-km 12.0 \
   -expire 90s \
   -firestore-project "my-firebase-project" \
   -firestore-credentials "../service-account-key.json"
 ```
 
-## 🖥️ Dashboard
+## 🖥️ Dashboard & Test Push Endpoint
 
 The web UI shows a live table of all tracked aircraft sorted by distance from your receiver, including:
 
@@ -89,6 +96,27 @@ The web UI shows a live table of all tracked aircraft sorted by distance from yo
 
 The dashboard reconnects automatically if the backend is restarted.
 
+### 🧪 Test Push Notification Interface
+
+You can trigger on-demand test push notifications to all registered mobile devices by visiting `/test-push` (or `/api/test-push`):
+
+```bash
+# Send default test push notification
+curl -X POST http://localhost:8080/test-push
+
+# Send custom test push notification payload
+curl -X POST http://localhost:8080/test-push \
+  -H "Content-Type: application/json" \
+  -d '{
+    "hex": "4601F6",
+    "callsign": "FIN123",
+    "operator": "Finnair",
+    "destCity": "London",
+    "destIATA": "LHR",
+    "distanceKm": 4.5
+  }'
+```
+
 ## 🔧 How it works
 
 ```
@@ -98,20 +126,31 @@ RTL-SDR dongle
       │ TCP :30003 (SBS-1 / BaseStation format)
       │
  flights-overhead
-      ├── pkg/sbs/parser     CSV line → typed Message struct
-      ├── pkg/sbs/tracker    incremental state aggregation per ICAO hex ID
-      ├── pkg/sbs/adsbdb     live aircraft & route lookups (adsbdb.com API)
-      ├── broadcast          snapshot fan-out to FlightsReceiver implementations:
-      │     ├── SSE           broadcasts to SSEBroker -> web clients
-      │     └── Firestore     syncs active flights collection in Cloud Firestore
-      ├── sbsfirestore       manages Firestore client connection
-      ├── frontend/broker    Server-Sent Events broker
-      └── frontend/dashboard embedded HTML/JS served at :8080
+      ├── pkg/sbs/parser          CSV line → typed Message struct
+      ├── pkg/sbs/tracker         incremental state aggregation per ICAO hex ID
+      ├── pkg/sbs/adsbdb          live aircraft & route lookups (adsbdb.com API)
+      ├── pkg/sbs/geo             Haversine distance (NM / KM) and track calculations
+      ├── broadcast               snapshot fan-out to FlightsReceiver implementations:
+      │     ├── SSE               broadcasts to SSEBroker -> web clients
+      │     ├── Firestore         syncs active flights collection in Cloud Firestore
+      │     └── PushNotification checks proximity & dispatches FCM alerts via Cloud Functions
+      ├── sbsfirestore            manages Firestore client connection
+      ├── frontend/broker         Server-Sent Events broker
+      └── frontend/http_handler   routes: / (dashboard), /events (SSE), /test-push (test push)
 ```
 
 SBS-1 messages are incremental — one message updates the callsign, another the position, another the speed. The tracker merges them into a single up-to-date `Aircraft` record per ICAO address. Aircraft that stop transmitting are expired after the configured `-expire` duration; aircraft that send an explicit `STA RM` or `STA AD` message are removed immediately.
 
 The TCP client reconnects automatically with exponential backoff (500 ms → 30 s) if the receiver goes offline.
+
+### 🔔 Proximity Push Notifications
+
+When an aircraft enters the configured proximity threshold (default `15.0 km`), `PushNotificationReceiver`:
+1. Calculates the Haversine distance in kilometers from the receiver base station.
+2. Deduplicates per flight session so that each aircraft only triggers **one** notification per pass.
+3. Authenticates against the `/pushNotification` Firebase Cloud Function using a Google Cloud Service Account OIDC ID Token (`google.golang.org/api/idtoken`).
+4. Multicasts an FCM push notification to all registered Android devices.
+5. Cleans up tracking state once the aircraft leaves active tracking.
 
 ### ✈️ Live Aircraft & Route Enrichment
 
@@ -125,8 +164,17 @@ Results are cached in memory for the lifetime of the process. Lookups are dedupl
 ## 🧪 Running the tests
 
 ```bash
+# Go backend tests
 cd backend
 go test -v ./...
+
+# Cloud Functions tests
+cd cloud-functions/functions
+npm test
+
+# Android tests
+cd android
+./gradlew test
 ```
 
 ## 📁 Project layout
@@ -135,63 +183,73 @@ The repository is structured into three subprojects: `backend/` (the Go tracker)
 
 ```
 flights-overhead/
-├── Taskfile.yml               # Task automation runner configuration (repo root)
-├── AGENTS.md                  # Detailed AI agent onboarding guide
-├── CLAUDE.md                  # Symlink → AGENTS.md
-├── backend/                   # Go ADS-B tracker (module: flights-overhead)
-│   ├── main.go                # CLI entrypoint and event loop
-│   ├── go.mod                 # Go module definition
+├── Taskfile.yml                        # Task automation runner configuration (repo root)
+├── AGENTS.md                           # Detailed AI agent onboarding guide
+├── CLAUDE.md                           # Symlink → AGENTS.md
+├── service-account-key.json            # Firestore service account key (gitignored, repo root)
+├── backend/                            # Go ADS-B tracker (module: flights-overhead)
+│   ├── main.go                         # CLI entrypoint and event loop
+│   ├── go.mod                          # Go module definition
 │   ├── broadcast/
-│   │   ├── broadcaster.go     # FlightsReceiver interface and snapshot fan-out
-│   │   ├── SSEFlightsReceiver.go # Distance/sort enrichment, SSE payload serialiser
-│   │   ├── firestore.go       # FirestoreFlightsReceiver (syncs snapshots to collection)
-│   │   └── firestore_test.go  # Tests for the Firestore synchronization receiver
+│   │   ├── broadcaster.go              # FlightsReceiver interface and snapshot fan-out
+│   │   ├── SSEFlightsReceiver.go       # Distance/sort enrichment, SSE payload serialiser
+│   │   ├── firestore.go                # FirestoreFlightsReceiver (syncs snapshots to collection)
+│   │   ├── firestore_test.go           # Tests for the Firestore synchronization receiver
+│   │   ├── push_receiver.go            # PushNotificationReceiver (proximity check & FCM dispatch)
+│   │   └── push_receiver_test.go       # Unit tests for push notification receiver
 │   ├── data/
-│   │   └── data.go            # Shared types: FlightJSON, StreamPayload
+│   │   └── data.go                     # Shared types: FlightJSON, StreamPayload, PushNotificationPayload
 │   ├── frontend/
-│   │   ├── broker.go          # SSEBroker — thread-safe SSE client registry
-│   │   ├── console.go         # Terminal flight table printer
-│   │   ├── dashboard.html     # Embedded web UI (compiled into the binary)
-│   │   └── http_handler.go    # HTTP routes (/ dashboard, /events SSE)
+│   │   ├── broker.go                   # SSEBroker — thread-safe SSE client registry
+│   │   ├── console.go                  # Terminal flight table printer
+│   │   ├── dashboard.html              # Embedded web UI (compiled into the binary)
+│   │   ├── http_handler.go             # HTTP routes (/, /events, /test-push)
+│   │   └── http_handler_test.go        # Unit tests for HTTP routes and test push dispatch
 │   ├── sbsfirestore/
-│   │   └── firestore.go       # Cloud Firestore client initialization and wrapper
+│   │   └── firestore.go                # Cloud Firestore client initialization and wrapper
 │   └── pkg/sbs/
-│       ├── message.go         # SBS-1 message types and field definitions
-│       ├── aircraft.go        # Aggregated aircraft state struct
-│       ├── parser.go          # CSV → Message parser
-│       ├── tracker.go         # Thread-safe aircraft state registry & enrichment cache
-│       ├── adsbdb.go          # adsbdb.com API client (aircraft & route structs + JSON parsing)
-│       ├── client.go          # TCP connection manager with auto-reconnect
-│       └── geo.go             # Haversine distance and heading utilities
-├── cloud-functions/           # Firebase project (deploy from this directory)
-│   ├── firebase.json          # Firebase project configuration
-│   ├── .firebaserc            # Firebase project alias
-│   ├── firestore.rules        # Firestore security rules
-│   ├── firestore.indexes.json # Firestore index definitions
-│   ├── flights-overhead.service # Systemd service unit configuration file
-│   └── functions/             # Firebase Cloud Functions (TypeScript)
-│       ├── package.json       # Node.js dependencies and lifecycle scripts
-│       ├── tsconfig.json      # TypeScript compilation configuration
-│       └── src/
-│           ├── index.ts       # Functions entrypoint & triggers
-│           ├── firebase.ts    # Admin SDK initialization & options
-│           ├── http.ts        # Authenticated HTTP method helper (CORS, ID token validation)
-│           ├── flights.ts     # GET /overheadFlights endpoint handler
-│           ├── token.ts       # Firebase Installation ID registration endpoint
-│           ├── validation.ts  # Document ID & platform validation helper
-│           └── push-notification.ts # Future push-notification scaffold
-└── android/                   # Native Android client
-    ├── build.gradle.kts       # Android root Gradle configuration
-    └── app/                   # App module (Jetpack Compose, Navigation3, Ktor, Firebase)
+│       ├── message.go                  # SBS-1 message types and field definitions
+│       ├── aircraft.go                 # Aggregated aircraft state struct
+│       ├── parser.go                   # CSV → Message parser
+│       ├── tracker.go                  # Thread-safe aircraft state registry & enrichment cache
+│       ├── adsbdb.go                   # adsbdb.com API client (aircraft & route structs + JSON parsing)
+│       ├── client.go                   # TCP connection manager with auto-reconnect
+│       └── geo.go                      # Haversine distance (NM & KM) and heading utilities
+├── cloud-functions/                    # Firebase project (deploy from this directory)
+│   ├── firebase.json                   # Firebase project configuration
+│   ├── .firebaserc                     # Firebase project alias
+│   ├── firestore.rules                 # Firestore security rules
+│   ├── firestore.indexes.json          # Firestore index definitions
+│   ├── flights-overhead.service.template # Systemd service unit configuration template
+│   └── functions/                      # Firebase Cloud Functions (TypeScript)
+│       ├── package.json                # Node.js dependencies and lifecycle scripts
+│       ├── tsconfig.json               # TypeScript compilation configuration
+│       ├── src/
+│       │   ├── index.ts                # Functions entrypoint & triggers
+│       │   ├── firebase.ts             # Admin SDK initialization & options
+│       │   ├── http.ts                 # Authenticated HTTP method helpers (onGet, onPost, onServicePost)
+│       │   ├── flights.ts              # GET /overheadFlights endpoint handler
+│       │   ├── token.ts                # FID & device metadata registration endpoint
+│       │   ├── validation.ts           # Document ID & platform validation helper
+│       │   └── push-notification.ts    # POST /pushNotification proximity multicast trigger
+│       └── test/                       # Cloud Functions unit tests (http, flights, token, push-notification)
+└── android/                            # Native Android client
+    ├── build.gradle.kts                # Android root Gradle configuration
+    └── app/                            # App module (Jetpack Compose, Navigation3, Firestore, FCM)
+        └── src/main/java/com/kypeli/flightsoverhead/
+            ├── repository/             # FlightsRepository (Firestore Flow streaming), TokenRepository
+            ├── service/                # FlightsFirebaseMessagingService & FlightsNotificationManager
+            ├── ui/                     # Jetpack Compose UI (FlightListScreen, FlightRow, LoginScreen)
+            └── viewmodel/              # FlightsViewModel & AuthViewModel
 ```
 
 ## 🔥 Firebase Cloud Functions
 
-The repository contains Firebase Cloud Functions (v2 API) written in TypeScript to support client queries and push notifications.
+The repository contains Firebase Cloud Functions (v2 API) written in TypeScript to support client queries, device registration, and push notifications.
 
 * **`overheadFlights` (Authenticated GET)**: Retrieves the current snapshot of active overhead flights directly from the `active_flights` Firestore collection.
-* **`token` (Authenticated POST)**: Registers/updates client Firebase Installation IDs (FIDs) in the `fcm_tokens` Firestore collection. Accepts `installationId` and optional `platform` (`android`, `ios`, `web`). Keyed by `installationId`.
-* **`pushNotification` (Service-Authenticated POST)**: Dispatches proximity multicast push notifications to registered client devices. Authenticated via Google Service Account OIDC ID tokens.
+* **`token` (Authenticated POST)**: Registers/updates client Firebase Installation IDs (FIDs) and device telemetry in the `fcm_tokens` Firestore collection. Accepts `installationId`, `platform` (`android`, `ios`, `web`), optional `email`, and `device` metadata (`manufacturer`, `model`, `osVersion`, `sdkInt`, `appVersion`, `appBuild`). Keyed by `installationId` for multi-device support.
+* **`pushNotification` (Service-Authenticated POST)**: Dispatches proximity multicast push notifications to registered client devices via Firebase Cloud Messaging (FCM). Authenticated via Google Service Account OIDC ID tokens.
 
 Client endpoints enforce SSL, CORS preflight, HTTP method constraints, and require a valid Firebase ID Token (or Google Service Account OIDC ID Token for server endpoints) passed as a Bearer token in the `Authorization` header.
 
@@ -202,23 +260,29 @@ npm run --prefix cloud-functions/functions serve
 ```
 
 ### Deployment
-To build (lint and compile TypeScript) and deploy the functions to your production Firebase project:
+To build (lint and compile TypeScript) and deploy the functions and rules to your production Firebase project:
 ```bash
-# Using Taskfile (from the repo root — runs in cloud-functions/ automatically)
+# Deploy Cloud Functions using Taskfile
 task deploy-functions
+
+# Deploy Firestore security rules using Taskfile
+task deploy-rules
 
 # Or using Firebase CLI directly (from the cloud-functions/ directory)
 cd cloud-functions
 firebase deploy --only functions
+firebase deploy --only firestore:rules
 ```
 
 ## 📱 Android Application
 
 The companion Android mobile app lives in `android/` and is built with:
 * **Jetpack Compose Material 3** & **Navigation3** for reactive and modern UI.
-* **Ktor Client** for querying Cloud Function endpoints (`overheadFlights`, `token`).
-* **Firebase Auth, Messaging & Installations** for user authentication, FCM push notification handling, and client installation ID registration.
-* **Metro** for lightweight dependency injection.
+* **Cloud Firestore Real-Time Streaming**: Direct `callbackFlow` snapshot listener on `active_flights` to stream live aircraft updates without polling.
+* **Live Flight Telemetry**: Dynamic `FlightRow` displaying operator logo/fallback avatar, flight number, origin/destination airport codes, flight path status chip (Climbing, Descending, Cruising), altitude in meters/feet, distance in km, heading, aircraft model description, registration, squawk, and ICAO hex code.
+* **Firebase Messaging & Installations**: Handles FCM push notification delivery via `FlightsNotificationManager` with expandable rich text, automatic dismissal, deep linking, and device metadata registration.
+* **Firebase Auth**: User authentication (Email/Password) with Compose Previews.
+* **Metro**: Lightweight dependency injection.
 
 ### Building & Running
 ```bash
@@ -227,8 +291,28 @@ cd android
 ./gradlew assembleDebug
 
 # Run unit tests
+cd android
 ./gradlew test
 ```
+
+## 🥧 Raspberry Pi Deployment
+
+Deploy `flights-overhead` to a Raspberry Pi running headless:
+
+1. Copy and configure the systemd unit file from the template:
+   ```bash
+   cp cloud-functions/flights-overhead.service.template cloud-functions/flights-overhead.service
+   # Edit with your actual tracker IP, coordinates, project ID, and credentials path
+   ```
+2. Deploy the binary and systemd service:
+   ```bash
+   task deploy-service-pi PI_HOST="raspberrypi.local" PI_USER="pi"
+   ```
+3. Monitor logs or restart service:
+   ```bash
+   task logs-pi PI_HOST="raspberrypi.local"
+   task restart-pi PI_HOST="raspberrypi.local"
+   ```
 
 ## 📻 Setting up an ADS-B receiver
 
