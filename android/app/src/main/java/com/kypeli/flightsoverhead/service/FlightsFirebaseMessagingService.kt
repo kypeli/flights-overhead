@@ -33,6 +33,19 @@ class FlightsFirebaseMessagingService : FirebaseMessagingService() {
             Timber.d("Message notification body: %s", it.body)
         }
 
+        val action = remoteMessage.data["action"] ?: remoteMessage.data["status"]
+        if (action.equals("dismiss", ignoreCase = true) ||
+            action.equals("cancel", ignoreCase = true) ||
+            action.equals("removed", ignoreCase = true) ||
+            remoteMessage.data["dismiss"] == "true"
+        ) {
+            val hex = remoteMessage.data["hex"]
+            if (!hex.isNullOrBlank()) {
+                FlightsNotificationManager.cancelNotificationForHex(applicationContext, hex)
+                return
+            }
+        }
+
         val title =
             FlightsNotificationManager.extractNotificationTitle(
                 notificationTitle = remoteMessage.notification?.title,

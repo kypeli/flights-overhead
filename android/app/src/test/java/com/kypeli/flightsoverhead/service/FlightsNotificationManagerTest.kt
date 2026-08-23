@@ -118,4 +118,22 @@ class FlightsNotificationManagerTest {
         """.trimIndent()
         assertEquals(expected, bigText)
     }
+
+    @Test
+    fun getNotificationId_isDeterministicAndCaseInsensitive() {
+        val id1 = FlightsNotificationManager.getNotificationId("4601F6")
+        val id2 = FlightsNotificationManager.getNotificationId("4601f6")
+        val id3 = FlightsNotificationManager.getNotificationId(" 4601F6 ")
+
+        assertEquals(id1, id2)
+        assertEquals(id1, id3)
+    }
+
+    @Test
+    fun getNotificationId_producesDifferentIdsForDifferentHexes() {
+        val id1 = FlightsNotificationManager.getNotificationId("4601F6")
+        val id2 = FlightsNotificationManager.getNotificationId("4006EA")
+
+        org.junit.Assert.assertNotEquals(id1, id2)
+    }
 }

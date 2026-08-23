@@ -6,6 +6,7 @@ import com.kypeli.flightsoverhead.data.AirlineResolver
 import com.kypeli.flightsoverhead.data.model.Flight
 import com.kypeli.flightsoverhead.repository.AuthRepository
 import com.kypeli.flightsoverhead.repository.FlightsRepository
+import com.kypeli.flightsoverhead.service.FlightNotificationService
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,11 +20,13 @@ class FlightsViewModel(
     private val repository: FlightsRepository,
     private val airlineResolver: AirlineResolver,
     private val authRepository: AuthRepository,
+    private val notificationService: FlightNotificationService,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     private var observeJob: Job? = null
+    private var previousActiveHexes: Set<String>? = null
 
     init {
         viewModelScope.launch {
@@ -33,6 +36,7 @@ class FlightsViewModel(
                 } else {
                     stopObserving()
                     _uiState.update { it.copy(flights = emptyList(), error = null) }
+                    notificationService.cancelNotificationsForInactiveFlights(emptySet())
                 }
             }
         }
@@ -56,6 +60,17 @@ class FlightsViewModel(
                         _uiState.update {
                             it.copy(flights = enriched, error = null)
                         }
+
+                        val currentHexes = flights.mapNotNull { it.hex.trim().takeIf { h -> h.isNotEmpty() } }.toSet()
+                        val prevHexes = previousActiveHexes
+                        if (prevHexes != null) {
+                            val removedHexes = prevHexes - currentHexes
+                            for (removedHex in removedHexes) {
+                                notificationService.cancelNotificationForHex(removedHex)
+                            }
+                        }
+                        notificationService.cancelNotificationsForInactiveFlights(currentHexes)
+                        previousActiveHexes = currentHexes
                     }.onFailure {
                         _uiState.update {
                             it.copy(error = UiState.Error.Authentication)
@@ -68,6 +83,7 @@ class FlightsViewModel(
     private fun stopObserving() {
         observeJob?.cancel()
         observeJob = null
+        previousActiveHexes = null
     }
 }
 

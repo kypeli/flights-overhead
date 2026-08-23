@@ -7,6 +7,7 @@ import com.kypeli.flightsoverhead.data.model.Flight
 import com.kypeli.flightsoverhead.data.model.User
 import com.kypeli.flightsoverhead.repository.AuthRepository
 import com.kypeli.flightsoverhead.repository.FlightsRepository
+import com.kypeli.flightsoverhead.service.FlightNotificationService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,6 +54,30 @@ class FlightsViewModelTest {
         }
     }
 
+    private class FakeFlightNotificationService : FlightNotificationService {
+        val cancelledHexes = mutableListOf<String>()
+        val inactiveCalls = mutableListOf<Collection<String>>()
+        val shownNotifications = mutableListOf<String>()
+
+        override fun showFlightNotification(title: String, body: String, data: Map<String, String>) {
+            shownNotifications.add(title)
+        }
+
+        override fun cancelNotification(intent: android.content.Intent?) {}
+
+        override fun cancelNotificationForHex(hex: String) {
+            cancelledHexes.add(hex)
+        }
+
+        override fun cancelNotificationsForInactiveFlights(activeHexes: Collection<String>) {
+            inactiveCalls.add(activeHexes)
+        }
+
+        override fun getNotificationId(hex: String): Int {
+            return hex.trim().uppercase().hashCode()
+        }
+    }
+
     private fun createDummyContext(): Context {
         return object : ContextWrapper(null) {}
     }
@@ -71,6 +96,7 @@ class FlightsViewModelTest {
     fun init_withLoggedInUser_observesFlightsAndUpdatesState() = runTest {
         val fakeAuth = FakeAuthRepository(initialUser = User(uid = "1", email = "test@example.com"))
         val fakeRepo = FakeFlightsRepository()
+        val fakeNotificationService = FakeFlightNotificationService()
         val mockFlight = Flight(
             airline = "Finnair",
             flightNumber = "AY123",
@@ -81,7 +107,7 @@ class FlightsViewModelTest {
         fakeRepo.flightsFlow.value = Result.success(listOf(mockFlight))
         val airlineResolver = AirlineResolver(createDummyContext())
 
-        val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth)
+        val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth, fakeNotificationService)
         advanceUntilIdle()
 
         assertEquals(1, viewModel.uiState.value.flights.size)
@@ -93,9 +119,10 @@ class FlightsViewModelTest {
     fun realTimeUpdate_automaticallyPushesNewFlightListToUiState() = runTest {
         val fakeAuth = FakeAuthRepository(initialUser = User(uid = "1", email = "test@example.com"))
         val fakeRepo = FakeFlightsRepository()
+        val fakeNotificationService = FakeFlightNotificationService()
         val airlineResolver = AirlineResolver(createDummyContext())
 
-        val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth)
+        val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth, fakeNotificationService)
         advanceUntilIdle()
 
         assertTrue(viewModel.uiState.value.flights.isEmpty())
@@ -117,13 +144,63 @@ class FlightsViewModelTest {
     }
 
     @Test
+    fun flightRemovedFromActiveList_dismissesNotificationForInactiveFlight() = runTest {
+        val fakeAuth = FakeAuthRepository(initialUser = User(uid = "1", email = "test@example.com"))
+        val fakeRepo = FakeFlightsRepository()
+        val fakeNotificationService = FakeFlightNotificationService()
+        val airlineResolver = AirlineResolver(createDummyContext())
+
+        val flight1 = Flight(airline = "Finnair", flightNumber = "AY123", departure = "Helsinki", arrival = "London", hex = "4601F6")
+        val flight2 = Flight(airline = "British Airways", flightNumber = "BAW227", departure = "London", arrival = "New York", hex = "4006EA")
+        fakeRepo.flightsFlow.value = Result.success(listOf(flight1, flight2))
+
+        val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth, fakeNotificationService)
+        advanceUntilIdle()
+
+        assertEquals(2, viewModel.uiState.value.flights.size)
+        assertTrue(fakeNotificationService.cancelledHexes.isEmpty())
+
+        // Flight 1 is no longer active (only Flight 2 remains)
+        fakeRepo.flightsFlow.value = Result.success(listOf(flight2))
+        advanceUntilIdle()
+
+        assertEquals(1, viewModel.uiState.value.flights.size)
+        assertEquals("BAW227", viewModel.uiState.value.flights[0].flightNumber)
+        assertTrue(fakeNotificationService.cancelledHexes.contains("4601F6"))
+    }
+
+    @Test
+    fun allFlightsRemoved_dismissesAllFlightNotifications() = runTest {
+        val fakeAuth = FakeAuthRepository(initialUser = User(uid = "1", email = "test@example.com"))
+        val fakeRepo = FakeFlightsRepository()
+        val fakeNotificationService = FakeFlightNotificationService()
+        val airlineResolver = AirlineResolver(createDummyContext())
+
+        val flight1 = Flight(airline = "Finnair", flightNumber = "AY123", departure = "Helsinki", arrival = "London", hex = "4601F6")
+        fakeRepo.flightsFlow.value = Result.success(listOf(flight1))
+
+        val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth, fakeNotificationService)
+        advanceUntilIdle()
+
+        assertEquals(1, viewModel.uiState.value.flights.size)
+
+        // All flights become inactive
+        fakeRepo.flightsFlow.value = Result.success(emptyList())
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.flights.isEmpty())
+        assertTrue(fakeNotificationService.cancelledHexes.contains("4601F6"))
+    }
+
+    @Test
     fun refresh_onSuccess_clearsPreviousError() = runTest {
         val fakeAuth = FakeAuthRepository(initialUser = User(uid = "1", email = "test@example.com"))
         val fakeRepo = FakeFlightsRepository()
+        val fakeNotificationService = FakeFlightNotificationService()
         fakeRepo.flightsFlow.value = Result.failure(RuntimeException("Auth error"))
         val airlineResolver = AirlineResolver(createDummyContext())
 
-        val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth)
+        val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth, fakeNotificationService)
         advanceUntilIdle()
 
         assertEquals(UiState.Error.Authentication, viewModel.uiState.value.error)
@@ -142,10 +219,11 @@ class FlightsViewModelTest {
     fun flow_onFailure_setsAuthenticationError() = runTest {
         val fakeAuth = FakeAuthRepository(initialUser = User(uid = "1", email = "test@example.com"))
         val fakeRepo = FakeFlightsRepository()
+        val fakeNotificationService = FakeFlightNotificationService()
         fakeRepo.flightsFlow.value = Result.failure(RuntimeException("Permission denied"))
         val airlineResolver = AirlineResolver(createDummyContext())
 
-        val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth)
+        val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth, fakeNotificationService)
         advanceUntilIdle()
 
         assertEquals(UiState.Error.Authentication, viewModel.uiState.value.error)
@@ -153,14 +231,15 @@ class FlightsViewModelTest {
     }
 
     @Test
-    fun authStateChange_whenUserLogsOut_clearsFlights() = runTest {
+    fun authStateChange_whenUserLogsOut_clearsFlightsAndCancelsInactiveNotifications() = runTest {
         val fakeAuth = FakeAuthRepository(initialUser = User(uid = "1", email = "test@example.com"))
         val fakeRepo = FakeFlightsRepository()
+        val fakeNotificationService = FakeFlightNotificationService()
         val mockFlight = Flight(airline = "Finnair", flightNumber = "AY123", departure = "Helsinki", arrival = "London", hex = "4601F6")
         fakeRepo.flightsFlow.value = Result.success(listOf(mockFlight))
         val airlineResolver = AirlineResolver(createDummyContext())
 
-        val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth)
+        val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth, fakeNotificationService)
         advanceUntilIdle()
 
         assertEquals(1, viewModel.uiState.value.flights.size)
@@ -171,5 +250,6 @@ class FlightsViewModelTest {
 
         assertTrue(viewModel.uiState.value.flights.isEmpty())
         assertNull(viewModel.uiState.value.error)
+        assertTrue(fakeNotificationService.inactiveCalls.last().isEmpty())
     }
 }

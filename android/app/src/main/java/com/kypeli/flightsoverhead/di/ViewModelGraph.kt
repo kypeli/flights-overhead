@@ -2,6 +2,7 @@ package com.kypeli.flightsoverhead.di
 
 import com.kypeli.flightsoverhead.di.scope.ViewModelScope
 import com.kypeli.flightsoverhead.repository.TokenRepository
+import com.kypeli.flightsoverhead.service.FlightNotificationService
 import com.kypeli.flightsoverhead.service.TokenService
 import com.kypeli.flightsoverhead.viewmodel.AuthViewModel
 import com.kypeli.flightsoverhead.viewmodel.FlightsViewModel
@@ -15,6 +16,7 @@ interface ViewModelGraph {
     val authViewModel: AuthViewModel
     val tokenRepository: TokenRepository
     val tokenService: TokenService
+    val flightNotificationService: FlightNotificationService
 
     @ContributesTo(AppScope::class)
     @GraphExtension.Factory

@@ -16,6 +16,11 @@ import java.util.Locale
 object FlightsNotificationManager {
     const val CHANNEL_ID = "flights_overhead_channel"
     const val EXTRA_NOTIFICATION_ID = "com.kypeli.flightsoverhead.EXTRA_NOTIFICATION_ID"
+    const val EXTRA_HEX = "com.kypeli.flightsoverhead.EXTRA_HEX"
+
+    fun getNotificationId(hex: String): Int {
+        return hex.trim().uppercase(Locale.US).hashCode()
+    }
 
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -162,6 +167,7 @@ object FlightsNotificationManager {
     fun cancelNotification(context: Context, intent: Intent?) {
         if (intent == null) return
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, -1)
+        val hex = intent.getStringExtra(EXTRA_HEX) ?: intent.getStringExtra("hex")
         if (notificationId != -1) {
             try {
                 NotificationManagerCompat.from(context).cancel(notificationId)
@@ -169,6 +175,43 @@ object FlightsNotificationManager {
             } catch (e: Exception) {
                 Timber.w(e, "Failed to dismiss notification ID %d", notificationId)
             }
+        } else if (!hex.isNullOrBlank()) {
+            cancelNotificationForHex(context, hex)
+        }
+    }
+
+    fun cancelNotificationForHex(context: Context, hex: String) {
+        if (hex.isBlank()) return
+        val notificationId = getNotificationId(hex)
+        try {
+            NotificationManagerCompat.from(context).cancel(notificationId)
+            Timber.d("Flight notification for hex %s (ID %d) dismissed", hex, notificationId)
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to dismiss notification for hex %s", hex)
+        }
+    }
+
+    fun cancelNotificationsForInactiveFlights(context: Context, activeHexes: Collection<String>) {
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+        val normalizedActive =
+            activeHexes.mapNotNull { it.trim().uppercase(Locale.US).takeIf { h -> h.isNotEmpty() } }.toSet()
+
+        try {
+            val activeNotifications = notificationManager.activeNotifications
+            for (sbn in activeNotifications) {
+                val notification = sbn.notification ?: continue
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && notification.channelId != CHANNEL_ID) {
+                    continue
+                }
+                val hex = notification.extras?.getString("hex")?.trim()?.uppercase(Locale.US)
+                if (hex != null && !normalizedActive.contains(hex)) {
+                    notificationManager.cancel(sbn.tag, sbn.id)
+                    Timber.d("Dismissed notification for inactive flight hex: %s (id: %d)", hex, sbn.id)
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to cancel notifications for inactive flights")
         }
     }
 
@@ -180,13 +223,18 @@ object FlightsNotificationManager {
     ) {
         createNotificationChannel(context)
 
+        val rawHex = data["hex"]?.trim()?.takeIf { it.isNotEmpty() }
         val notificationId =
-            data["hex"]?.hashCode() ?: ((System.currentTimeMillis() % Int.MAX_VALUE).toInt())
+            rawHex?.let { getNotificationId(it) }
+                ?: ((System.currentTimeMillis() % Int.MAX_VALUE).toInt())
 
         val intent =
             Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra(EXTRA_NOTIFICATION_ID, notificationId)
+                if (rawHex != null) {
+                    putExtra(EXTRA_HEX, rawHex)
+                }
                 data.forEach { (key, value) ->
                     putExtra(key, value)
                 }
@@ -211,6 +259,13 @@ object FlightsNotificationManager {
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
+                .apply {
+                    if (rawHex != null) {
+                        addExtras(android.os.Bundle().apply {
+                            putString("hex", rawHex)
+                        })
+                    }
+                }
                 .build()
 
         try {
