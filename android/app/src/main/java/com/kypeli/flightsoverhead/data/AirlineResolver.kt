@@ -37,9 +37,20 @@ class AirlineResolver(
                     .bufferedReader()
                     .use { it.readText() }
             val entries = json.decodeFromString<List<AirlineEntry>>(jsonString)
-            entries
-                .filter { it.id.isNotBlank() }
-                .associateBy({ it.name }, { AirlineInfo(it.name, it.logoUrl) })
+            val map = mutableMapOf<String, AirlineInfo>()
+            for (entry in entries) {
+                if (entry.id.isBlank() && entry.name.isBlank()) continue
+                val info = AirlineInfo(entry.name, entry.logoUrl)
+                if (entry.name.isNotBlank()) {
+                    map[entry.name.trim().lowercase()] = info
+                    map[entry.name.trim()] = info
+                }
+                if (entry.id.isNotBlank()) {
+                    map[entry.id.trim().lowercase()] = info
+                    map[entry.id.trim()] = info
+                }
+            }
+            map
         } catch (e: Exception) {
             Timber.e(e, "Failed to load %s", ASSET_FILE_NAME)
             emptyMap()
@@ -47,21 +58,39 @@ class AirlineResolver(
     }
 
     /**
-     * Resolves the airline logo URL based on the flight number's airline code.
-     * e.g. "AA123" -> airline code "AA" -> fetches logo from airlines.json or falls back to Kiwi CDN.
+     * Resolves the airline logo URL based on the airline name or flight number.
+     * e.g. "Finnair" -> logo for AY, or "AY123" -> logo for AY from airlines.json.
      */
-    fun getLogoUrl(airlineName: String): String {
-        if (airlineName.isBlank()) {
-            return ""
+    fun getLogoUrl(airlineName: String, flightNumber: String = ""): String {
+        val trimmedAirline = airlineName.trim()
+        val trimmedFlightNumber = flightNumber.trim()
+
+        if (trimmedAirline.isNotBlank()) {
+            val info = airlineMap[trimmedAirline.lowercase()] ?: airlineMap[trimmedAirline]
+            if (info != null && info.logoUrl.isNotBlank()) {
+                return info.logoUrl
+            }
         }
 
-        // Check if we have a direct match in dotmarn's airlines.json
-        val info = airlineMap[airlineName]
-        if (info != null && info.logoUrl.isNotBlank()) {
-            return info.logoUrl
+        if (trimmedFlightNumber.isNotBlank()) {
+            val prefix3 = trimmedFlightNumber.take(3).lowercase()
+            val info3 = airlineMap[prefix3]
+            if (info3 != null && info3.logoUrl.isNotBlank()) {
+                return info3.logoUrl
+            }
+
+            val prefix2 = trimmedFlightNumber.take(2).lowercase()
+            val info2 = airlineMap[prefix2]
+            if (info2 != null && info2.logoUrl.isNotBlank()) {
+                return info2.logoUrl
+            }
         }
 
-        // If not found in JSON, fall back to the default Kiwi CDN URL pattern
-        return "$KIWI_LOGO_BASE_URL/$airlineName.png"
+        if (trimmedAirline.isNotBlank()) {
+            return "$KIWI_LOGO_BASE_URL/$trimmedAirline.png"
+        }
+
+        return ""
     }
 }
+

@@ -3,6 +3,7 @@ package broadcast
 import (
 	"context"
 	"flights-overhead/data"
+	"flights-overhead/pkg/sbs"
 	"log/slog"
 	"reflect"
 
@@ -16,16 +17,25 @@ type FirestoreFlightsReceiver struct {
 	ch       chan []data.FlightJSON
 	lastSeen map[string]bool
 	prevData map[string]map[string]interface{}
+	baseLat  float64
+	baseLon  float64
 }
 
 // NewFirestoreFlightsReceiver creates a new FirestoreFlightsReceiver and starts its background worker.
-func NewFirestoreFlightsReceiver(ctx context.Context, client *firestore.Client) *FirestoreFlightsReceiver {
+func NewFirestoreFlightsReceiver(ctx context.Context, client *firestore.Client, baseCoords ...float64) *FirestoreFlightsReceiver {
+	var baseLat, baseLon float64
+	if len(baseCoords) >= 2 {
+		baseLat = baseCoords[0]
+		baseLon = baseCoords[1]
+	}
 	r := &FirestoreFlightsReceiver{
 		client:   client,
 		ctx:      ctx,
 		ch:       make(chan []data.FlightJSON, 1),
 		lastSeen: make(map[string]bool),
 		prevData: make(map[string]map[string]interface{}),
+		baseLat:  baseLat,
+		baseLon:  baseLon,
 	}
 	go r.worker()
 	return r
@@ -99,6 +109,11 @@ func (r *FirestoreFlightsReceiver) process(flights []data.FlightJSON) {
 	for _, f := range flights {
 		docRef := r.client.Collection("active_flights").Doc(f.HexIdent)
 
+		var distanceKm float64
+		if f.HasPosition && (r.baseLat != 0 || r.baseLon != 0) {
+			distanceKm = sbs.DistanceKM(r.baseLat, r.baseLon, f.Latitude, f.Longitude)
+		}
+
 		// Create a map representation of the flight data to upload
 		dataMap := map[string]any{
 			"hex":             f.HexIdent,
@@ -106,6 +121,10 @@ func (r *FirestoreFlightsReceiver) process(flights []data.FlightJSON) {
 			"latitude":        f.Latitude,
 			"longitude":       f.Longitude,
 			"altitude":        f.Altitude,
+			"verticalRate":    f.VerticalRate,
+			"distanceKm":      distanceKm,
+			"distance":        distanceKm,
+			"squawk":          f.Squawk,
 			"manufacturer":    f.Manufacturer,
 			"model":           f.Model,
 			"registration":    f.Registration,

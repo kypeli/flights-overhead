@@ -172,7 +172,7 @@ func main() {
 	// Create receivers
 	broker := frontend.NewSSEBroker()
 	sseReceiver := createSSEReceivers(broker, cfg.lat, cfg.lon, cfg.trackerAddr)
-	firestoreReceiver := createFirestoreReceiver(ctx, firestoreClient)
+	firestoreReceiver := createFirestoreReceiver(ctx, firestoreClient, cfg.lat, cfg.lon)
 	pushReceiver := createPushNotificationReceiver(ctx, cfg.lat, cfg.lon, cfg.proximityKM, cfg.pushNotificationURL, cfg.firestoreCreds)
 
 	// Launch embedded HTTP web server with the SSE broker and test push handler
@@ -236,8 +236,8 @@ func createSSEReceivers(broker *frontend.SSEBroker, lat, lon float64, trackerAdd
 	return broadcast.NewSSEFlightsReceiver(broker, lat, lon, trackerAddr)
 }
 
-func createFirestoreReceiver(ctx context.Context, client *firestore.Client) *broadcast.FirestoreFlightsReceiver {
-	return broadcast.NewFirestoreFlightsReceiver(ctx, client)
+func createFirestoreReceiver(ctx context.Context, client *firestore.Client, baseCoords ...float64) *broadcast.FirestoreFlightsReceiver {
+	return broadcast.NewFirestoreFlightsReceiver(ctx, client, baseCoords...)
 }
 
 func createPushNotificationReceiver(ctx context.Context, lat, lon, proximityKM float64, endpointURL, credsFile string) *broadcast.PushNotificationReceiver {

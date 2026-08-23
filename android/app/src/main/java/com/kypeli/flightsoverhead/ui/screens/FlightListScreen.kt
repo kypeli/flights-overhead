@@ -66,6 +66,7 @@ fun FlightListScreen(
             FlightsScreenContent(
                 flights = uiState.flights,
                 modifier = Modifier.padding(innerPadding),
+                onRefresh = { viewModel.refresh() },
             )
         }
     }
@@ -75,11 +76,12 @@ fun FlightListScreen(
 private fun FlightsScreenContent(
     flights: List<Flight>,
     modifier: Modifier = Modifier,
+    onRefresh: () -> Unit = {},
 ) {
     if (flights.isEmpty()) {
         EmptyState(
             modifier = modifier,
-            onRefresh = {},
+            onRefresh = onRefresh,
         )
     } else {
         LazyColumn(
@@ -149,10 +151,58 @@ private fun FlightListTopAppBar(
 fun FlightListScreenPreview() {
     val mockFlights =
         listOf(
-            Flight("American Airlines", "AA123", "SFO", "LAX"),
-            Flight("United Airlines", "UA456", "SFO", "ORD"),
-            Flight("Delta Airlines", "DL789", "SFO", "JFK"),
-            Flight("Southwest", "WN101", "SFO", "LAS"),
+            Flight(
+                airline = "Finnair",
+                flightNumber = "AY123",
+                departure = "Helsinki",
+                arrival = "London",
+                originCode = "HEL",
+                destinationCode = "LHR",
+                altitudeMeters = 3658,
+                flightPath = com.kypeli.flightsoverhead.entity.FlightPath.Climbing,
+                distanceKm = 28.0,
+                aircraftModel = "Airbus A350-900",
+                registration = "OH-LWA",
+            ),
+            Flight(
+                airline = "British Airways",
+                flightNumber = "BAW227",
+                departure = "London",
+                arrival = "New York",
+                originCode = "LHR",
+                destinationCode = "JFK",
+                altitudeMeters = 10668,
+                flightPath = com.kypeli.flightsoverhead.entity.FlightPath.Cruising,
+                distanceKm = 14.2,
+                aircraftModel = "Boeing 777-200",
+                registration = "G-VIIA",
+            ),
+            Flight(
+                airline = "Lufthansa",
+                flightNumber = "DLH456",
+                departure = "Frankfurt",
+                arrival = "Helsinki",
+                originCode = "FRA",
+                destinationCode = "HEL",
+                altitudeMeters = 1850,
+                flightPath = com.kypeli.flightsoverhead.entity.FlightPath.Descending,
+                distanceKm = 8.5,
+                aircraftModel = "Airbus A321",
+                registration = "D-AIRA",
+            ),
+            Flight(
+                airline = "Scandinavian Airlines",
+                flightNumber = "SAS789",
+                departure = "Stockholm",
+                arrival = "Oslo",
+                originCode = "ARN",
+                destinationCode = "OSL",
+                altitudeMeters = 9450,
+                flightPath = com.kypeli.flightsoverhead.entity.FlightPath.Cruising,
+                distanceKm = 42.0,
+                aircraftModel = "Airbus A320neo",
+                registration = "SE-ROA",
+            ),
         )
     FlightsOverheadTheme {
         Scaffold(
@@ -179,9 +229,30 @@ fun FlightListScreenPreview() {
 fun FlightListScreenTabletPreview() {
     val mockFlights =
         listOf(
-            Flight("American Airlines", "AA123", "SFO", "LAX"),
-            Flight("United Airlines", "UA456", "SFO", "ORD"),
-            Flight("Delta Airlines", "DL789", "SFO", "JFK"),
+            Flight(
+                airline = "Finnair",
+                flightNumber = "AY123",
+                departure = "Helsinki",
+                arrival = "London",
+                originCode = "HEL",
+                destinationCode = "LHR",
+                altitudeMeters = 3658,
+                flightPath = com.kypeli.flightsoverhead.entity.FlightPath.Climbing,
+                distanceKm = 28.0,
+                aircraftModel = "Airbus A350-900",
+            ),
+            Flight(
+                airline = "British Airways",
+                flightNumber = "BAW227",
+                departure = "London",
+                arrival = "New York",
+                originCode = "LHR",
+                destinationCode = "JFK",
+                altitudeMeters = 10668,
+                flightPath = com.kypeli.flightsoverhead.entity.FlightPath.Cruising,
+                distanceKm = 14.2,
+                aircraftModel = "Boeing 777-200",
+            ),
         )
     FlightsOverheadTheme {
         Scaffold(

@@ -37,6 +37,8 @@ import com.kypeli.flightsoverhead.data.model.Flight
 import com.kypeli.flightsoverhead.entity.FlightPath
 import com.kypeli.flightsoverhead.ui.theme.DataMonoStyle
 import com.kypeli.flightsoverhead.ui.theme.FlightsOverheadTheme
+import java.text.NumberFormat
+import java.util.Locale
 
 @Composable
 fun FlightRow(
@@ -62,29 +64,47 @@ fun FlightRow(
                     modifier = Modifier.weight(1f),
                 )
 
-                AircraftFlight()
+                AircraftFlight(flight = flight)
             }
 
-            DepartureArrival()
+            DepartureArrival(flight = flight)
 
             HorizontalDivider(
                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
             )
 
-            Altitude()
+            AltitudeAndModel(flight = flight)
         }
     }
 }
 
 @Composable
-private fun AircraftFlight() {
-    Column(horizontalAlignment = Alignment.End) {
+private fun AircraftFlight(
+    flight: Flight,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.End,
+    ) {
         FlightPathChip(
-            path = FlightPath.Climbing,
+            path = flight.flightPath,
             modifier = Modifier.padding(bottom = 8.dp),
         )
+
+        val distanceText =
+            if (flight.distanceKm > 0.0) {
+                if (flight.distanceKm >= 10.0) {
+                    "${String.format(Locale.US, "%.0f", flight.distanceKm)} km away"
+                } else {
+                    "${String.format(Locale.US, "%.1f", flight.distanceKm)} km away"
+                }
+            } else {
+                "—"
+            }
+
         Text(
-            text = "28 mi away",
+            text = distanceText,
             style = DataMonoStyle.copy(fontSize = 12.sp),
             color = MaterialTheme.colorScheme.primary,
         )
@@ -92,39 +112,70 @@ private fun AircraftFlight() {
 }
 
 @Composable
-private fun Altitude() {
+private fun AltitudeAndModel(
+    flight: Flight,
+    modifier: Modifier = Modifier,
+) {
     Row(
-        modifier = Modifier.padding(top = 14.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(top = 14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            painter = painterResource(R.drawable.outline_altitude_24),
-            contentDescription = null,
-            modifier =
-                Modifier
-                    .size(20.dp)
-                    .padding(end = 4.dp),
-            tint = MaterialTheme.colorScheme.secondary,
-        )
-        Text(
-            text = "ALTITUDE",
-            style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = "12,000 ft",
-            style = DataMonoStyle.copy(fontSize = 13.sp),
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(start = 8.dp),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                painter = painterResource(R.drawable.outline_altitude_24),
+                contentDescription = null,
+                modifier =
+                    Modifier
+                        .size(20.dp)
+                        .padding(end = 4.dp),
+                tint = MaterialTheme.colorScheme.secondary,
+            )
+            Text(
+                text = "ALTITUDE",
+                style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            val altitudeText =
+                if (flight.altitudeMeters > 0) {
+                    "${NumberFormat.getNumberInstance(Locale.US).format(flight.altitudeMeters)} m"
+                } else {
+                    "—"
+                }
+            Text(
+                text = altitudeText,
+                style = DataMonoStyle.copy(fontSize = 13.sp),
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+
+        if (flight.aircraftModel.isNotBlank()) {
+            Text(
+                text = flight.aircraftModel,
+                style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
 @Composable
-private fun DepartureArrival() {
+private fun DepartureArrival(
+    flight: Flight,
+    modifier: Modifier = Modifier,
+) {
+    val originCode = flight.originCode.ifBlank { "---" }
+    val destCode = flight.destinationCode.ifBlank { "---" }
+
     Box(
         modifier =
-            Modifier
+            modifier
                 .fillMaxWidth()
                 .padding(top = 22.dp, bottom = 18.dp),
     ) {
@@ -134,8 +185,9 @@ private fun DepartureArrival() {
             horizontalArrangement = Arrangement.Start,
         ) {
             RouteAirport(
-                code = "HEL",
+                code = originCode,
                 label = "ORIGIN",
+                city = flight.departure.takeIf { it.isNotBlank() },
             )
             Spacer(modifier = Modifier.size(32.dp))
             Icon(
@@ -145,8 +197,9 @@ private fun DepartureArrival() {
             )
             Spacer(modifier = Modifier.size(32.dp))
             RouteAirport(
-                code = "TRE",
+                code = destCode,
                 label = "DESTINATION",
+                city = flight.arrival.takeIf { it.isNotBlank() },
             )
         }
     }
@@ -157,6 +210,7 @@ private fun RouteAirport(
     code: String,
     label: String,
     modifier: Modifier = Modifier,
+    city: String? = null,
 ) {
     Column(
         modifier = modifier,
@@ -171,6 +225,15 @@ private fun RouteAirport(
             style = DataMonoStyle.copy(fontSize = 27.sp, fontWeight = FontWeight.SemiBold),
             color = MaterialTheme.colorScheme.onSurface,
         )
+        if (!city.isNullOrBlank() && !city.equals(code, ignoreCase = true)) {
+            Text(
+                text = city,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -182,15 +245,17 @@ private fun FlightDetails(
     Column(
         modifier = modifier.padding(horizontal = 12.dp),
     ) {
+        val airlineText = flight.airline.ifBlank { "UNKNOWN OPERATOR" }
         Text(
-            text = flight.airline.uppercase(),
+            text = airlineText.uppercase(),
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+        val flightNumberText = flight.flightNumber.ifBlank { flight.hex.ifBlank { "---" } }
         Text(
-            text = flight.flightNumber,
+            text = flightNumberText,
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
@@ -205,6 +270,10 @@ private fun AirlineLogo(
     modifier: Modifier = Modifier,
 ) {
     val logoShape = RoundedCornerShape(16.dp)
+    val fallbackText =
+        flight.flightNumber.take(2).takeIf { it.isNotBlank() && it != "N/" && it != "--" }
+            ?: flight.airline.take(2).takeIf { it.isNotBlank() }
+            ?: "?"
 
     Box(
         modifier =
@@ -221,7 +290,7 @@ private fun AirlineLogo(
                 ),
         contentAlignment = Alignment.Center,
     ) {
-        if (flight.logoUrl.isNotEmpty()) {
+        if (flight.logoUrl.isNotBlank()) {
             SubcomposeAsyncImage(
                 model = flight.logoUrl,
                 contentDescription = "Airline Logo",
@@ -251,7 +320,7 @@ private fun AirlineLogo(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = flight.flightNumber.take(2),
+                            text = fallbackText,
                             color = MaterialTheme.colorScheme.onPrimary,
                             style = MaterialTheme.typography.titleMedium,
                         )
@@ -267,7 +336,7 @@ private fun AirlineLogo(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "?",
+                    text = fallbackText,
                     color = MaterialTheme.colorScheme.onPrimary,
                     style = MaterialTheme.typography.titleMedium,
                 )
@@ -280,15 +349,43 @@ private fun AirlineLogo(
 @Composable
 fun FlightRowPreview() {
     FlightsOverheadTheme {
-        FlightRow(
-            flight =
-                Flight(
-                    airline = "SkyTrack Pro",
-                    flightNumber = "AY001",
-                    departure = "SFO",
-                    arrival = "JFK",
-                    logoUrl = "",
-                ),
-        )
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            FlightRow(
+                flight =
+                    Flight(
+                        airline = "Finnair",
+                        flightNumber = "AY123",
+                        departure = "Helsinki",
+                        arrival = "London",
+                        originCode = "HEL",
+                        destinationCode = "LHR",
+                        altitudeMeters = 3658,
+                        flightPath = FlightPath.Climbing,
+                        distanceKm = 28.0,
+                        aircraftModel = "Airbus A350-900",
+                        registration = "OH-LWA",
+                    ),
+            )
+            FlightRow(
+                flight =
+                    Flight(
+                        airline = "British Airways",
+                        flightNumber = "BAW227",
+                        departure = "London",
+                        arrival = "New York",
+                        originCode = "LHR",
+                        destinationCode = "JFK",
+                        altitudeMeters = 10668,
+                        flightPath = FlightPath.Cruising,
+                        distanceKm = 14.2,
+                        aircraftModel = "Boeing 777-200",
+                        registration = "G-VIIA",
+                    ),
+            )
+        }
     }
 }
+
