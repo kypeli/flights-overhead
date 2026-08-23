@@ -25,29 +25,11 @@ type PushReceiverConfig struct {
 }
 
 // PushNotificationPayload is the JSON request body sent to the push notification endpoint.
-type PushNotificationPayload struct {
-	HexIdent        string  `json:"hex"`
-	Callsign        string  `json:"callsign,omitempty"`
-	DistanceKM      float64 `json:"distanceKm"`
-	Altitude        int     `json:"altitude,omitempty"`
-	GroundSpeed     float64 `json:"groundSpeed,omitempty"`
-	Track           float64 `json:"track,omitempty"`
-	Latitude        float64 `json:"latitude,omitempty"`
-	Longitude       float64 `json:"longitude,omitempty"`
-	Manufacturer    string  `json:"manufacturer,omitempty"`
-	Model           string  `json:"model,omitempty"`
-	Registration    string  `json:"registration,omitempty"`
-	ICAOType        string  `json:"icaoType,omitempty"`
-	RegisteredOwner string  `json:"registeredOwner,omitempty"`
-	Operator        string  `json:"operator,omitempty"`
-	OriginICAO      string  `json:"originICAO,omitempty"`
-	OriginIATA      string  `json:"originIATA,omitempty"`
-	OriginName      string  `json:"originName,omitempty"`
-	OriginCity      string  `json:"originCity,omitempty"`
-	DestICAO        string  `json:"destICAO,omitempty"`
-	DestIATA        string  `json:"destIATA,omitempty"`
-	DestName        string  `json:"destName,omitempty"`
-	DestCity        string  `json:"destCity,omitempty"`
+type PushNotificationPayload = data.PushNotificationPayload
+
+// TestPushSender defines an interface for sending on-demand test push notifications.
+type TestPushSender interface {
+	DispatchTestNotification(ctx context.Context, customPayload *PushNotificationPayload) (int, *PushNotificationPayload, error)
 }
 
 // PushNotificationReceiver implements FlightsReceiver to dispatch push notifications
@@ -64,6 +46,9 @@ type PushNotificationReceiver struct {
 	mu       sync.Mutex
 	notified map[string]bool
 }
+
+// Ensure PushNotificationReceiver implements TestPushSender.
+var _ TestPushSender = (*PushNotificationReceiver)(nil)
 
 // NewPushNotificationReceiver creates a new PushNotificationReceiver.
 func NewPushNotificationReceiver(ctx context.Context, cfg PushReceiverConfig) *PushNotificationReceiver {
@@ -153,21 +138,23 @@ func (r *PushNotificationReceiver) Send(flights []data.FlightJSON) {
 	}
 }
 
-// dispatchNotification sends an HTTP POST request to the Cloud Function endpoint.
-func (r *PushNotificationReceiver) dispatchNotification(payload PushNotificationPayload) {
-	bodyBytes, err := json.Marshal(payload)
-	if err != nil {
-		slog.Error("failed to marshal push notification payload", "hex", payload.HexIdent, "error", err)
-		return
+// sendPayload sends an HTTP POST request with the given payload to the configured endpoint.
+func (r *PushNotificationReceiver) sendPayload(ctx context.Context, payload PushNotificationPayload) (int, error) {
+	if r.endpointURL == "" {
+		return 0, fmt.Errorf("push notification endpoint URL is empty")
 	}
 
-	reqCtx, cancel := context.WithTimeout(r.ctx, 10*time.Second)
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return 0, fmt.Errorf("failed to marshal push notification payload: %w", err)
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, r.endpointURL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		slog.Error("failed to create push notification HTTP request", "hex", payload.HexIdent, "error", err)
-		return
+		return 0, fmt.Errorf("failed to create push notification HTTP request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -175,6 +162,17 @@ func (r *PushNotificationReceiver) dispatchNotification(payload PushNotification
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", r.authToken))
 	}
 
+	resp, err := r.httpClient.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("failed to execute push notification request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	return resp.StatusCode, nil
+}
+
+// dispatchNotification sends an HTTP POST request to the Cloud Function endpoint asynchronously.
+func (r *PushNotificationReceiver) dispatchNotification(payload PushNotificationPayload) {
 	slog.Info("sending proximity push notification request",
 		"hex", payload.HexIdent,
 		"callsign", payload.Callsign,
@@ -182,17 +180,16 @@ func (r *PushNotificationReceiver) dispatchNotification(payload PushNotification
 		"threshold_km", r.proximityThresholdKM,
 	)
 
-	resp, err := r.httpClient.Do(req)
+	statusCode, err := r.sendPayload(r.ctx, payload)
 	if err != nil {
 		slog.Error("failed to send push notification request", "hex", payload.HexIdent, "error", err)
 		return
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if statusCode < 200 || statusCode >= 300 {
 		slog.Warn("push notification endpoint returned non-2xx status",
 			"hex", payload.HexIdent,
-			"status", resp.Status,
+			"status_code", statusCode,
 		)
 		return
 	}
@@ -200,7 +197,103 @@ func (r *PushNotificationReceiver) dispatchNotification(payload PushNotification
 	slog.Info("push notification dispatched successfully",
 		"hex", payload.HexIdent,
 		"callsign", payload.Callsign,
+		"status_code", statusCode,
 	)
+}
+
+// DispatchTestNotification sends a test push notification to the configured endpoint immediately.
+// If customPayload is nil or contains empty fields, default dummy values are populated.
+func (r *PushNotificationReceiver) DispatchTestNotification(ctx context.Context, customPayload *PushNotificationPayload) (int, *PushNotificationPayload, error) {
+	var payload PushNotificationPayload
+	if customPayload != nil {
+		payload = *customPayload
+	}
+
+	// Populate defaults if fields are empty
+	if payload.HexIdent == "" {
+		payload.HexIdent = "TEST01"
+	}
+	if payload.Callsign == "" {
+		payload.Callsign = "TESTFLT"
+	}
+	if payload.DistanceKM <= 0 {
+		payload.DistanceKM = 3.5
+	}
+	if payload.Altitude == 0 {
+		payload.Altitude = 3500
+	}
+	if payload.GroundSpeed == 0 {
+		payload.GroundSpeed = 280
+	}
+	if payload.Track == 0 {
+		payload.Track = 180
+	}
+	if payload.Latitude == 0 && payload.Longitude == 0 {
+		if r.baseLat != 0 && r.baseLon != 0 {
+			payload.Latitude = r.baseLat + 0.02
+			payload.Longitude = r.baseLon + 0.02
+		} else {
+			payload.Latitude = 60.1990
+			payload.Longitude = 24.9340
+		}
+	}
+	if payload.Manufacturer == "" {
+		payload.Manufacturer = "Airbus"
+	}
+	if payload.Model == "" {
+		payload.Model = "A350-900"
+	}
+	if payload.Registration == "" {
+		payload.Registration = "OH-LWA"
+	}
+	if payload.ICAOType == "" {
+		payload.ICAOType = "A359"
+	}
+	if payload.RegisteredOwner == "" {
+		payload.RegisteredOwner = "Test Airlines"
+	}
+	if payload.Operator == "" {
+		payload.Operator = "Test Airlines"
+	}
+	if payload.OriginICAO == "" && payload.OriginIATA == "" {
+		payload.OriginICAO = "EFHK"
+		payload.OriginIATA = "HEL"
+		payload.OriginName = "Helsinki Airport"
+		payload.OriginCity = "Helsinki"
+	}
+	if payload.DestICAO == "" && payload.DestIATA == "" {
+		payload.DestICAO = "RJAA"
+		payload.DestIATA = "NRT"
+		payload.DestName = "Narita International Airport"
+		payload.DestCity = "Tokyo"
+	}
+
+	slog.Info("dispatching on-demand test push notification",
+		"hex", payload.HexIdent,
+		"callsign", payload.Callsign,
+		"endpoint", r.endpointURL,
+	)
+
+	statusCode, err := r.sendPayload(ctx, payload)
+	if err != nil {
+		slog.Error("failed to dispatch test push notification", "hex", payload.HexIdent, "error", err)
+		return statusCode, &payload, err
+	}
+
+	if statusCode < 200 || statusCode >= 300 {
+		slog.Warn("test push notification endpoint returned non-2xx status",
+			"hex", payload.HexIdent,
+			"status_code", statusCode,
+		)
+	} else {
+		slog.Info("test push notification dispatched successfully",
+			"hex", payload.HexIdent,
+			"callsign", payload.Callsign,
+			"status_code", statusCode,
+		)
+	}
+
+	return statusCode, &payload, nil
 }
 
 // IsNotified returns whether a given hex has already been notified in its current flight session.

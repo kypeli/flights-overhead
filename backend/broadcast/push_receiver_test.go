@@ -145,3 +145,82 @@ func TestPushNotificationReceiver_DeduplicationAndProximity(t *testing.T) {
 		t.Fatalf("expected request count to be 2 after new flight session, got %d", atomic.LoadInt32(&requestCount))
 	}
 }
+
+func TestPushNotificationReceiver_DispatchTestNotification(t *testing.T) {
+	var lastReceivedPayload PushNotificationPayload
+	var mu sync.Mutex
+
+	mockClient := &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) *http.Response {
+			body, _ := io.ReadAll(r.Body)
+			var payload PushNotificationPayload
+			_ = json.Unmarshal(body, &payload)
+
+			mu.Lock()
+			lastReceivedPayload = payload
+			mu.Unlock()
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"success": true, "sentCount": 1}`)),
+				Header:     make(http.Header),
+			}
+		}),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	receiver := NewPushNotificationReceiver(ctx, PushReceiverConfig{
+		BaseLat:              60.1699,
+		BaseLon:              24.9384,
+		ProximityThresholdKM: 10.0,
+		EndpointURL:          "http://mock-cloud-function/pushNotification",
+		HTTPClient:           mockClient,
+	})
+
+	// 1. Dispatch test notification with default dummy payload
+	status, payload, err := receiver.DispatchTestNotification(ctx, nil)
+	if err != nil {
+		t.Fatalf("unexpected error on default test notification: %v", err)
+	}
+	if status != http.StatusOK {
+		t.Errorf("expected status 200, got %d", status)
+	}
+	if payload.HexIdent != "TEST01" || payload.Callsign != "TESTFLT" {
+		t.Errorf("expected default hex TEST01 and callsign TESTFLT, got %+v", payload)
+	}
+
+	mu.Lock()
+	received := lastReceivedPayload
+	mu.Unlock()
+	if received.HexIdent != "TEST01" || received.Model != "A350-900" {
+		t.Errorf("expected received mock payload to have hex TEST01, got %+v", received)
+	}
+
+	// 2. Dispatch test notification with custom payload
+	custom := &PushNotificationPayload{
+		HexIdent:   "CUSTOM99",
+		Callsign:   "CUST99",
+		DistanceKM: 2.5,
+		Altitude:   1200,
+	}
+	status, payload, err = receiver.DispatchTestNotification(ctx, custom)
+	if err != nil {
+		t.Fatalf("unexpected error on custom test notification: %v", err)
+	}
+	if status != http.StatusOK {
+		t.Errorf("expected status 200, got %d", status)
+	}
+	if payload.HexIdent != "CUSTOM99" || payload.Callsign != "CUST99" {
+		t.Errorf("expected custom hex CUSTOM99 and callsign CUST99, got %+v", payload)
+	}
+
+	mu.Lock()
+	received = lastReceivedPayload
+	mu.Unlock()
+	if received.HexIdent != "CUSTOM99" || received.DistanceKM != 2.5 {
+		t.Errorf("expected received mock payload to have hex CUSTOM99 and distance 2.5, got %+v", received)
+	}
+}
+

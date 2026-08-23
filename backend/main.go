@@ -167,9 +167,14 @@ func main() {
 	broadcastTicker := time.NewTicker(1 * time.Second)
 	defer broadcastTicker.Stop()
 
-	// Launch embedded HTTP web server with the SSE broker
+	// Create receivers
 	broker := frontend.NewSSEBroker()
-	httpHandler := frontend.NewHTTPHandler(broker)
+	sseReceiver := createSSEReceivers(broker, cfg.lat, cfg.lon, cfg.trackerAddr)
+	firestoreReceiver := createFirestoreReceiver(ctx, firestoreClient)
+	pushReceiver := createPushNotificationReceiver(ctx, cfg.lat, cfg.lon, cfg.proximityKM, cfg.pushNotificationURL)
+
+	// Launch embedded HTTP web server with the SSE broker and test push handler
+	httpHandler := frontend.NewHTTPHandler(broker, pushReceiver)
 	go func() {
 		slog.Info("starting web dashboard server...", "addr", cfg.httpAddr)
 		if err := http.ListenAndServe(cfg.httpAddr, httpHandler); err != nil {
@@ -177,11 +182,6 @@ func main() {
 			cancel()
 		}
 	}()
-
-	// Create receivers
-	sseReceiver := createSSEReceivers(broker, cfg.lat, cfg.lon, cfg.trackerAddr)
-	firestoreReceiver := createFirestoreReceiver(ctx, firestoreClient)
-	pushReceiver := createPushNotificationReceiver(ctx, cfg.lat, cfg.lon, cfg.proximityKM, cfg.pushNotificationURL)
 
 	slog.Info("listening for incoming messages...")
 
