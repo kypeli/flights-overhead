@@ -1,33 +1,99 @@
 package com.kypeli.flightsoverhead.repository
 
+import com.google.android.gms.tasks.Task
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FirebaseFirestore
 import com.kypeli.flightsoverhead.api.FlightDto
-import com.kypeli.flightsoverhead.api.FlightsApi
 import com.kypeli.flightsoverhead.data.model.Flight
 import com.kypeli.flightsoverhead.di.scope.ViewModelScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
-import io.ktor.client.HttpClient
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 import com.kypeli.flightsoverhead.entity.FlightPath
 import kotlin.math.roundToInt
 
 interface FlightsRepository {
+    fun getActiveFlightsFlow(): Flow<Result<List<Flight>>>
     suspend fun fetchActiveFlights(): Result<List<Flight>>
 }
 
 @ContributesBinding(ViewModelScope::class)
 @Inject
 class FlightsRepositoryImpl(
-    private val httpClient: HttpClient,
-    private val authRepository: AuthRepository,
+    private val firestore: FirebaseFirestore,
 ) : FlightsRepository {
+
+    override fun getActiveFlightsFlow(): Flow<Result<List<Flight>>> = callbackFlow {
+        val listenerRegistration = firestore.collection("active_flights")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(Result.failure(error))
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val flights = snapshot.documents.map { doc ->
+                        doc.toFlightDto().toFlight()
+                    }
+                    trySend(Result.success(flights))
+                }
+            }
+
+        awaitClose {
+            listenerRegistration.remove()
+        }
+    }
+
     override suspend fun fetchActiveFlights(): Result<List<Flight>> {
-        val token = authRepository.getAccessToken()
-        return FlightsApi
-            .getAboveFlights(httpClient, token)
-            .map { dtos -> dtos.map { it.toFlight() } }
+        return runCatching {
+            val snapshot = firestore.collection("active_flights").get().awaitTask()
+            snapshot.documents.map { doc -> doc.toFlightDto().toFlight() }
+        }
     }
 }
+
+internal fun DocumentSnapshot.toFlightDto(): FlightDto =
+    FlightDto(
+        hex = getString("hex") ?: id,
+        callsign = getString("callsign").orEmpty(),
+        latitude = getDouble("latitude") ?: 0.0,
+        longitude = getDouble("longitude") ?: 0.0,
+        altitude = getLong("altitude")?.toInt() ?: 0,
+        verticalRate = getLong("verticalRate")?.toInt() ?: 0,
+        distance = getDouble("distance") ?: 0.0,
+        distanceKm = getDouble("distanceKm") ?: 0.0,
+        squawk = getString("squawk").orEmpty(),
+        manufacturer = getString("manufacturer").orEmpty(),
+        model = getString("model").orEmpty(),
+        registration = getString("registration").orEmpty(),
+        icaoType = getString("icaoType").orEmpty(),
+        registeredOwner = getString("registeredOwner").orEmpty(),
+        operator = getString("operator").orEmpty(),
+        originICAO = getString("originICAO").orEmpty(),
+        originIATA = getString("originIATA").orEmpty(),
+        originName = getString("originName").orEmpty(),
+        originCity = getString("originCity").orEmpty(),
+        destICAO = getString("destICAO").orEmpty(),
+        destIATA = getString("destIATA").orEmpty(),
+        destName = getString("destName").orEmpty(),
+        destCity = getString("destCity").orEmpty(),
+    )
+
+private suspend fun <T> Task<T>.awaitTask(): T =
+    suspendCancellableCoroutine { continuation ->
+        addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                continuation.resume(task.result)
+            } else {
+                continuation.resumeWithException(task.exception ?: RuntimeException("Task failed"))
+            }
+        }
+    }
 
 internal fun FlightDto.toFlight(): Flight {
     val airlineName =

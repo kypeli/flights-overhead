@@ -39,8 +39,13 @@ class FlightsViewModelTest {
     }
 
     private class FakeFlightsRepository : FlightsRepository {
+        val flightsFlow = MutableStateFlow<Result<List<Flight>>>(Result.success(emptyList()))
         var fetchResult: Result<List<Flight>> = Result.success(emptyList())
         var fetchCallCount = 0
+
+        override fun getActiveFlightsFlow(): kotlinx.coroutines.flow.Flow<Result<List<Flight>>> {
+            return flightsFlow
+        }
 
         override suspend fun fetchActiveFlights(): Result<List<Flight>> {
             fetchCallCount++
@@ -63,7 +68,7 @@ class FlightsViewModelTest {
     }
 
     @Test
-    fun init_withLoggedInUser_fetchesFlightsAndUpdatesState() = runTest {
+    fun init_withLoggedInUser_observesFlightsAndUpdatesState() = runTest {
         val fakeAuth = FakeAuthRepository(initialUser = User(uid = "1", email = "test@example.com"))
         val fakeRepo = FakeFlightsRepository()
         val mockFlight = Flight(
@@ -73,7 +78,7 @@ class FlightsViewModelTest {
             arrival = "London",
             hex = "4601F6",
         )
-        fakeRepo.fetchResult = Result.success(listOf(mockFlight))
+        fakeRepo.flightsFlow.value = Result.success(listOf(mockFlight))
         val airlineResolver = AirlineResolver(createDummyContext())
 
         val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth)
@@ -85,24 +90,47 @@ class FlightsViewModelTest {
     }
 
     @Test
-    fun refresh_onSuccess_clearsPreviousError() = runTest {
-        val fakeAuth = FakeAuthRepository(initialUser = null)
+    fun realTimeUpdate_automaticallyPushesNewFlightListToUiState() = runTest {
+        val fakeAuth = FakeAuthRepository(initialUser = User(uid = "1", email = "test@example.com"))
         val fakeRepo = FakeFlightsRepository()
-        fakeRepo.fetchResult = Result.failure(RuntimeException("Auth error"))
         val airlineResolver = AirlineResolver(createDummyContext())
 
         val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth)
         advanceUntilIdle()
 
-        // Trigger failed refresh
-        viewModel.refresh()
+        assertTrue(viewModel.uiState.value.flights.isEmpty())
+
+        // Backend pushes new flight
+        val flight1 = Flight(airline = "Finnair", flightNumber = "AY123", departure = "Helsinki", arrival = "London", hex = "4601F6")
+        fakeRepo.flightsFlow.value = Result.success(listOf(flight1))
+        advanceUntilIdle()
+
+        assertEquals(1, viewModel.uiState.value.flights.size)
+        assertEquals("AY123", viewModel.uiState.value.flights[0].flightNumber)
+
+        // Backend pushes second flight
+        val flight2 = Flight(airline = "British Airways", flightNumber = "BAW227", departure = "London", arrival = "New York", hex = "4006EA")
+        fakeRepo.flightsFlow.value = Result.success(listOf(flight1, flight2))
+        advanceUntilIdle()
+
+        assertEquals(2, viewModel.uiState.value.flights.size)
+    }
+
+    @Test
+    fun refresh_onSuccess_clearsPreviousError() = runTest {
+        val fakeAuth = FakeAuthRepository(initialUser = User(uid = "1", email = "test@example.com"))
+        val fakeRepo = FakeFlightsRepository()
+        fakeRepo.flightsFlow.value = Result.failure(RuntimeException("Auth error"))
+        val airlineResolver = AirlineResolver(createDummyContext())
+
+        val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth)
         advanceUntilIdle()
 
         assertEquals(UiState.Error.Authentication, viewModel.uiState.value.error)
 
-        // Now trigger successful refresh
+        // Now push successful update
         val mockFlight = Flight(airline = "Finnair", flightNumber = "AY123", departure = "Helsinki", arrival = "London", hex = "4601F6")
-        fakeRepo.fetchResult = Result.success(listOf(mockFlight))
+        fakeRepo.flightsFlow.value = Result.success(listOf(mockFlight))
         viewModel.refresh()
         advanceUntilIdle()
 
@@ -111,16 +139,13 @@ class FlightsViewModelTest {
     }
 
     @Test
-    fun refresh_onFailure_setsAuthenticationError() = runTest {
-        val fakeAuth = FakeAuthRepository(initialUser = null)
+    fun flow_onFailure_setsAuthenticationError() = runTest {
+        val fakeAuth = FakeAuthRepository(initialUser = User(uid = "1", email = "test@example.com"))
         val fakeRepo = FakeFlightsRepository()
-        fakeRepo.fetchResult = Result.failure(RuntimeException("Network error"))
+        fakeRepo.flightsFlow.value = Result.failure(RuntimeException("Permission denied"))
         val airlineResolver = AirlineResolver(createDummyContext())
 
         val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth)
-        advanceUntilIdle()
-
-        viewModel.refresh()
         advanceUntilIdle()
 
         assertEquals(UiState.Error.Authentication, viewModel.uiState.value.error)
@@ -132,7 +157,7 @@ class FlightsViewModelTest {
         val fakeAuth = FakeAuthRepository(initialUser = User(uid = "1", email = "test@example.com"))
         val fakeRepo = FakeFlightsRepository()
         val mockFlight = Flight(airline = "Finnair", flightNumber = "AY123", departure = "Helsinki", arrival = "London", hex = "4601F6")
-        fakeRepo.fetchResult = Result.success(listOf(mockFlight))
+        fakeRepo.flightsFlow.value = Result.success(listOf(mockFlight))
         val airlineResolver = AirlineResolver(createDummyContext())
 
         val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth)
