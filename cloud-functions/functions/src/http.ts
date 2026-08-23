@@ -4,12 +4,18 @@ import { getAuth } from "firebase-admin/auth";
 import { OAuth2Client } from "google-auth-library";
 import type { Response } from "express";
 
-// Handler for an authenticated POST endpoint. `uid` is the verified
-// caller's Firebase UID.
+// Caller identity for a verified Firebase user token.
+export interface AuthenticatedUser {
+  uid: string;
+  email?: string;
+}
+
+// Handler for an authenticated endpoint. `user` contains the verified
+// caller's Firebase identity (UID and optional email).
 export type AuthenticatedHandler = (
   req: Request,
   res: Response,
-  uid: string,
+  user: AuthenticatedUser,
 ) => void | Promise<void>;
 
 // Caller identity for a verified Google Service Account OIDC token.
@@ -98,25 +104,25 @@ function onAuthenticatedMethod(
         return;
       }
 
-      const uid = await onAuthenticated(req, res);
-      if (!uid) return;
+      const user = await onAuthenticated(req, res);
+      if (!user) return;
 
-      return handler(req, res, uid);
+      return handler(req, res, user);
     },
   );
 }
 
 /**
- * Verifies the Firebase ID token and returns the caller's UID.
+ * Verifies the Firebase ID token and returns the caller's user identity.
  *
  * @param {Request} req The incoming HTTP request.
  * @param {Response} res The outgoing HTTP response.
- * @return {Promise<string | null>} The caller's UID, or null if verification fails.
+ * @return {Promise<AuthenticatedUser | null>} The caller's user identity, or null if verification fails.
  */
 async function onAuthenticated(
   req: Request,
   res: Response,
-): Promise<string | null> {
+): Promise<AuthenticatedUser | null> {
   // Validate Authorization header
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -127,7 +133,10 @@ async function onAuthenticated(
   const idToken = authHeader.split("Bearer ")[1];
   try {
     const decodedToken = await getAuth().verifyIdToken(idToken);
-    return decodedToken.uid;
+    return {
+      uid: decodedToken.uid,
+      email: decodedToken.email,
+    };
   } catch (error) {
     logger.error("Error verifying ID token:", error);
     res.status(401).send("Unauthorized: Invalid ID token");

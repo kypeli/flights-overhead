@@ -1,8 +1,10 @@
 package com.kypeli.flightsoverhead.repository
 
+import android.os.Build
 import com.google.android.gms.tasks.Task
 import com.google.firebase.installations.FirebaseInstallations
-import com.google.firebase.messaging.FirebaseMessaging
+import com.kypeli.flightsoverhead.BuildConfig
+import com.kypeli.flightsoverhead.api.DeviceInfoDto
 import com.kypeli.flightsoverhead.api.TokenApi
 import com.kypeli.flightsoverhead.di.scope.ViewModelScope
 import dev.zacsweers.metro.ContributesBinding
@@ -60,6 +62,7 @@ class TokenRepositoryImpl(
                     httpClient = httpClient,
                     idToken = idToken,
                     installationId = installationId,
+                    deviceInfo = getDeviceInfoDto(),
                 ).map {
                     lastRegisteredKey = registrationKey
                     Timber.d("Successfully registered Installation ID with backend")
@@ -68,6 +71,16 @@ class TokenRepositoryImpl(
                 }
         }
     }
+
+    private fun getDeviceInfoDto(): DeviceInfoDto =
+        DeviceInfoDto(
+            manufacturer = Build.MANUFACTURER,
+            model = Build.MODEL,
+            osVersion = Build.VERSION.RELEASE,
+            sdkInt = Build.VERSION.SDK_INT,
+            appVersion = BuildConfig.VERSION_NAME,
+            appBuild = BuildConfig.VERSION_CODE.toLong(),
+        )
 }
 
 private suspend fun <T> Task<T>.awaitTask(): T =

@@ -14,13 +14,20 @@ object TokenApi {
         idToken: String,
         installationId: String,
         platform: String = "android",
+        deviceInfo: DeviceInfoDto? = null,
     ): Result<TokenResponseDto> =
         runCatching {
             httpClient
                 .post(ApiEndpoints.TOKEN.url) {
                     header("Authorization", "Bearer $idToken")
                     contentType(ContentType.Application.Json)
-                    setBody(TokenRequestDto(installationId = installationId, platform = platform))
+                    setBody(
+                        TokenRequestDto(
+                            installationId = installationId,
+                            platform = platform,
+                            device = deviceInfo,
+                        ),
+                    )
                 }.body<TokenResponseDto>()
         }
 }

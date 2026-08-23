@@ -12,11 +12,11 @@ describe("HTTP Middleware & Authentication (http.ts)", () => {
     // Setup default auth verifyIdToken mock behavior
     auth.verifyIdToken = (async (token: string) => {
       if (token === "valid-token-user-1") {
-        return { uid: "user-1" } as unknown as
+        return { uid: "user-1", email: "user1@example.com" } as unknown as
           ReturnType<typeof auth.verifyIdToken> extends Promise<infer U> ? U : never;
       }
       if (token === "valid-token-user-2") {
-        return { uid: "user-2" } as unknown as
+        return { uid: "user-2", email: "user2@example.com" } as unknown as
           ReturnType<typeof auth.verifyIdToken> extends Promise<infer U> ? U : never;
       }
       throw new Error("Decoding Firebase ID token failed");
@@ -121,11 +121,11 @@ describe("HTTP Middleware & Authentication (http.ts)", () => {
       assert.strictEqual(res.body, "Unauthorized: Invalid ID token");
     });
 
-    it("passes authenticated uid to handler on successful verification", async () => {
-      let receivedUid = "";
-      const handler = onGet(async (req, res, uid) => {
-        receivedUid = uid;
-        res.status(200).json({ success: true, user: uid });
+    it("passes authenticated user to handler on successful verification", async () => {
+      let receivedUser: { uid: string; email?: string } | null = null;
+      const handler = onGet(async (req, res, user) => {
+        receivedUser = user;
+        res.status(200).json({ success: true, user: user.uid, email: user.email });
       });
 
       const req = createMockRequest({
@@ -135,9 +135,9 @@ describe("HTTP Middleware & Authentication (http.ts)", () => {
       const res = new MockResponse();
       await handler(req, asResponse(res));
 
-      assert.strictEqual(receivedUid, "user-1");
+      assert.deepStrictEqual(receivedUser, { uid: "user-1", email: "user1@example.com" });
       assert.strictEqual(res.statusCode, 200);
-      assert.deepStrictEqual(res.body, { success: true, user: "user-1" });
+      assert.deepStrictEqual(res.body, { success: true, user: "user-1", email: "user1@example.com" });
     });
   });
 
@@ -162,9 +162,9 @@ describe("HTTP Middleware & Authentication (http.ts)", () => {
     });
 
     it("verifies credentials and calls handler with POST method", async () => {
-      let receivedUid = "";
-      const handler = onPost(async (req, res, uid) => {
-        receivedUid = uid;
+      let receivedUser: { uid: string; email?: string } | null = null;
+      const handler = onPost(async (req, res, user) => {
+        receivedUser = user;
         res.status(200).json({ received: req.body });
       });
 
@@ -176,7 +176,7 @@ describe("HTTP Middleware & Authentication (http.ts)", () => {
       const res = new MockResponse();
       await handler(req, asResponse(res));
 
-      assert.strictEqual(receivedUid, "user-2");
+      assert.deepStrictEqual(receivedUser, { uid: "user-2", email: "user2@example.com" });
       assert.strictEqual(res.statusCode, 200);
       assert.deepStrictEqual(res.body, { received: { key: "value" } });
     });

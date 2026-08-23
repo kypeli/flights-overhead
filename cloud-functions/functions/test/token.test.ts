@@ -11,9 +11,12 @@ describe("token endpoint (token.ts)", () => {
   beforeEach(() => {
     auth.verifyIdToken = (async (idToken: string) => {
       if (idToken === "valid-token") {
-        return { uid: "user-abc" } as unknown as ReturnType<typeof auth.verifyIdToken> extends Promise<infer U>
-          ? U
-          : never;
+        return { uid: "user-abc", email: "user@example.com" } as unknown as
+          ReturnType<typeof auth.verifyIdToken> extends Promise<infer U> ? U : never;
+      }
+      if (idToken === "valid-token-no-email") {
+        return { uid: "user-no-email" } as unknown as
+          ReturnType<typeof auth.verifyIdToken> extends Promise<infer U> ? U : never;
       }
       throw new Error("Invalid ID token");
     }) as typeof auth.verifyIdToken;
@@ -41,7 +44,7 @@ describe("token endpoint (token.ts)", () => {
     assert.strictEqual(res.statusCode, 401);
   });
 
-  it("registers installationId keyed by installation ID with explicit platform successfully", async () => {
+  it("registers installationId with explicit platform, email, and device info successfully", async () => {
     let savedCollection = "";
     let savedDocId = "";
     let savedData: unknown = null;
@@ -68,6 +71,12 @@ describe("token endpoint (token.ts)", () => {
       body: {
         installationId: "sample-installation-id",
         platform: "ios",
+        device: {
+          manufacturer: "Apple",
+          model: "iPhone15,2",
+          osVersion: "17.4",
+          appVersion: "1.0",
+        },
       },
     });
     const res = new MockResponse();
@@ -83,7 +92,14 @@ describe("token endpoint (token.ts)", () => {
     const doc = savedData as Record<string, unknown>;
     assert.strictEqual(doc.installationId, "sample-installation-id");
     assert.strictEqual(doc.uid, "user-abc");
+    assert.strictEqual(doc.email, "user@example.com");
     assert.strictEqual(doc.platform, "ios");
+    assert.deepStrictEqual(doc.device, {
+      manufacturer: "Apple",
+      model: "iPhone15,2",
+      osVersion: "17.4",
+      appVersion: "1.0",
+    });
     assert.strictEqual(typeof doc.updatedAt, "string");
     assert.ok(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(
@@ -92,7 +108,7 @@ describe("token endpoint (token.ts)", () => {
     );
   });
 
-  it("uses installationId as document ID and defaults platform to android", async () => {
+  it("uses installationId as document ID and defaults platform to android without device info", async () => {
     let savedDocId = "";
     let savedData: unknown = null;
 
@@ -124,13 +140,57 @@ describe("token endpoint (token.ts)", () => {
     const doc = savedData as Record<string, unknown>;
     assert.strictEqual(doc.installationId, "fid-standalone");
     assert.strictEqual(doc.uid, "user-abc");
+    assert.strictEqual(doc.email, "user@example.com");
     assert.strictEqual(doc.platform, "android"); // default
+    assert.strictEqual(doc.device, undefined);
     assert.strictEqual(typeof doc.updatedAt, "string");
     assert.ok(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(
         doc.updatedAt as string,
       ),
     );
+  });
+
+  it("falls back to body email or null when auth token has no email", async () => {
+    let savedData: unknown = null;
+
+    db.collection = (() => ({
+      doc: () => ({
+        set: async (data: unknown) => {
+          savedData = data;
+        },
+      }),
+    })) as typeof db.collection;
+
+    const reqWithFallback = createMockRequest({
+      method: "POST",
+      headers: { authorization: "Bearer valid-token-no-email" },
+      body: {
+        installationId: "fid-fallback",
+        email: "fallback@example.com",
+      },
+    });
+    const resWithFallback = new MockResponse();
+
+    await token(reqWithFallback, asResponse(resWithFallback));
+    assert.strictEqual(resWithFallback.statusCode, 200);
+    assert.strictEqual(
+      (savedData as Record<string, unknown>).email,
+      "fallback@example.com",
+    );
+
+    const reqWithoutEmail = createMockRequest({
+      method: "POST",
+      headers: { authorization: "Bearer valid-token-no-email" },
+      body: {
+        installationId: "fid-no-email",
+      },
+    });
+    const resWithoutEmail = new MockResponse();
+
+    await token(reqWithoutEmail, asResponse(resWithoutEmail));
+    assert.strictEqual(resWithoutEmail.statusCode, 200);
+    assert.strictEqual((savedData as Record<string, unknown>).email, null);
   });
 
   describe("validation failures", () => {

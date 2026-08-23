@@ -35,6 +35,32 @@ class TokenDtoTest {
     }
 
     @Test
+    fun serialize_tokenRequestDto_withDeviceInfo_containsDeviceFields() {
+        val deviceInfo = com.kypeli.flightsoverhead.api.DeviceInfoDto(
+            manufacturer = "Google",
+            model = "Pixel 8 Pro",
+            osVersion = "15",
+            sdkInt = 35,
+            appVersion = "1.0",
+            appBuild = 1L,
+        )
+        val request = TokenRequestDto(
+            installationId = "sample_fid_device",
+            platform = "android",
+            device = deviceInfo,
+        )
+        val jsonString = json.encodeToString(request)
+
+        assertTrue(jsonString.contains("\"installationId\":\"sample_fid_device\""))
+        assertTrue(jsonString.contains("\"manufacturer\":\"Google\""))
+        assertTrue(jsonString.contains("\"model\":\"Pixel 8 Pro\""))
+        assertTrue(jsonString.contains("\"osVersion\":\"15\""))
+        assertTrue(jsonString.contains("\"sdkInt\":35"))
+        assertTrue(jsonString.contains("\"appVersion\":\"1.0\""))
+        assertTrue(jsonString.contains("\"appBuild\":1"))
+    }
+
+    @Test
     fun deserialize_tokenResponseDto_parsesSuccessField() {
         val jsonString = """{"success": true}"""
         val response = json.decodeFromString<TokenResponseDto>(jsonString)
