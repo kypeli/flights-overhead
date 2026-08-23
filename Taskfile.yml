@@ -1,60 +1,87 @@
-version: '3'
+version: "3"
 
 tasks:
-  build:
-    desc: Build the flights-overhead server binary
-    dir: backend
-    cmds:
-      - go build -o bin/flights-overhead main.go
+    build:
+        desc: Build the flights-overhead server binary
+        dir: backend
+        cmds:
+            - go build -o bin/flights-overhead main.go
 
-  build-pi:
-    desc: Build the flights-overhead server binary for Raspberry Pi (Linux/arm64)
-    dir: backend
-    cmds:
-      - GOOS=linux GOARCH=arm64 go build -o bin/flights-overhead-pi main.go
+    build-pi:
+        desc: Build the flights-overhead server binary for Raspberry Pi (Linux/arm64)
+        dir: backend
+        cmds:
+            - GOOS=linux GOARCH=arm64 go build -o bin/flights-overhead-pi main.go
 
-  deploy-pi:
-    desc: Build and deploy the binary to Raspberry Pi via scp
-    dir: backend
-    deps: [build-pi]
-    vars:
-      PI_HOST: '{{.PI_HOST | default "pi24-bookworm.local"}}'
-      PI_USER: '{{.PI_USER | default "pi"}}'
-      PI_PATH: '{{.PI_PATH | default "~/flights-overhead"}}'
-    cmds:
-      - scp bin/flights-overhead-pi {{.PI_USER}}@{{.PI_HOST}}:{{.PI_PATH}}
+    deploy-pi:
+        desc: Build and deploy the binary to Raspberry Pi via scp and restart service
+        dir: backend
+        deps: [build-pi]
+        vars:
+            PI_HOST: '{{.PI_HOST | default "pi24-bookworm.local"}}'
+            PI_USER: '{{.PI_USER | default "pi"}}'
+            PI_PATH: '{{.PI_PATH | default "/home/pi/flights-overhead"}}'
+        cmds:
+            - scp bin/flights-overhead-pi {{.PI_USER}}@{{.PI_HOST}}:{{.PI_PATH}}
+            - ssh {{.PI_USER}}@{{.PI_HOST}} "chmod +x {{.PI_PATH}} && (sudo systemctl restart flights-overhead.service || true)"
 
-  run:
-    desc: Build and start the server with coordinates and firestore credentials
-    dir: backend
-    deps: [build]
-    vars:
-      LAT: '{{.LAT}}'
-      LON: '{{.LON}}'
-      TRACKER: '{{.TRACKER}}'
-      PROJECT: '{{.PROJECT | default "flights-overhead"}}'
-      CREDENTIALS: '{{.CREDENTIALS | default "../service-account-key.json"}}'
-      WEBSERVER: '{{.WEBSERVER | default "localhost:8080"}}'
-    preconditions:
-      - sh: 'test -n "{{.TRACKER}}"'
-        msg: "Error: TRACKER parameter is required. Run as: task run TRACKER=<tracker> LAT=<latitude> LON=<longitude> [PROJECT=<project_id>] [CREDENTIALS=<credentials_path>] [args...]"
-      - sh: 'test -n "{{.LAT}}"'
-        msg: "Error: LAT parameter is required. Run as: task run TRACKER=<tracker> LAT=<latitude> LON=<longitude> [PROJECT=<project_id>] [CREDENTIALS=<credentials_path>] [args...]"
-      - sh: 'test -n "{{.LON}}"'
-        msg: "Error: LON parameter is required. Run as: task run TRACKER=<tracker> LAT=<latitude> LON=<longitude> [PROJECT=<project_id>] [CREDENTIALS=<credentials_path>] [args...]"
-    cmds:
-      - ./bin/flights-overhead -tracker-addr="{{.TRACKER}}:30003" -http="{{.WEBSERVER}}" -lat="{{.LAT}}" -lon="{{.LON}}" -firestore-project="{{.PROJECT}}" -firestore-credentials="{{.CREDENTIALS}}" {{.CLI_ARGS}}
+    deploy-service-pi:
+        desc: Deploy systemd service unit to Raspberry Pi and enable/start it
+        deps: [deploy-pi]
+        vars:
+            PI_HOST: '{{.PI_HOST | default "pi24-bookworm.local"}}'
+            PI_USER: '{{.PI_USER | default "pi"}}'
+        cmds:
+            - scp cloud-functions/flights-overhead.service {{.PI_USER}}@{{.PI_HOST}}:/tmp/flights-overhead.service
+            - ssh {{.PI_USER}}@{{.PI_HOST}} "sudo mv /tmp/flights-overhead.service /etc/systemd/system/flights-overhead.service && sudo systemctl daemon-reload && sudo systemctl enable flights-overhead.service && sudo systemctl restart flights-overhead.service"
 
-  test-functions:
-    desc: Run unit tests for Firebase Cloud Functions
-    dir: cloud-functions/functions
-    cmds:
-      - npm test
+    restart-pi:
+        desc: Restart the flights-overhead systemd service on Raspberry Pi
+        vars:
+            PI_HOST: '{{.PI_HOST | default "pi24-bookworm.local"}}'
+            PI_USER: '{{.PI_USER | default "pi"}}'
+        cmds:
+            - ssh {{.PI_USER}}@{{.PI_HOST}} "sudo systemctl restart flights-overhead.service"
 
-  deploy-functions:
-    desc: Build and deploy Firebase Cloud Functions to production
-    dir: cloud-functions
-    cmds:
-      - npx -y firebase-tools@latest deploy --only functions
+    logs-pi:
+        desc: Stream live logs from the flights-overhead service on Raspberry Pi
+        vars:
+            PI_HOST: '{{.PI_HOST | default "pi24-bookworm.local"}}'
+            PI_USER: '{{.PI_USER | default "pi"}}'
+        cmds:
+            - ssh {{.PI_USER}}@{{.PI_HOST}} "journalctl -u flights-overhead.service -f"
 
+    run:
+        desc: Build and start the server with coordinates and firestore credentials
+        dir: backend
+        deps: [build]
+        vars:
+            LAT: "{{.LAT}}"
+            LON: "{{.LON}}"
+            TRACKER: "{{.TRACKER}}"
+            PROJECT: '{{.PROJECT | default "flights-overhead"}}'
+            CREDENTIALS: '{{.CREDENTIALS | default "../service-account-key.json"}}'
+            WEBSERVER: '{{.WEBSERVER | default "localhost:8080"}}'
+            PROXIMITY_KM: '{{.PROXIMITY_KM | default "15.0"}}'
+            PUSH_URL: '{{.PUSH_URL | default "https://pushnotification-g5q7shkmca-lz.a.run.app"}}'
+        preconditions:
+            - sh: 'test -n "{{.TRACKER}}"'
+              msg: "Error: TRACKER parameter is required. Run as: task run TRACKER=<tracker> LAT=<latitude> LON=<longitude> [PROJECT=<project_id>] [CREDENTIALS=<credentials_path>] [args...]"
+            - sh: 'test -n "{{.LAT}}"'
+              msg: "Error: LAT parameter is required. Run as: task run TRACKER=<tracker> LAT=<latitude> LON=<longitude> [PROJECT=<project_id>] [CREDENTIALS=<credentials_path>] [args...]"
+            - sh: 'test -n "{{.LON}}"'
+              msg: "Error: LON parameter is required. Run as: task run TRACKER=<tracker> LAT=<latitude> LON=<longitude> [PROJECT=<project_id>] [CREDENTIALS=<credentials_path>] [args...]"
+        cmds:
+            - ./bin/flights-overhead -tracker-addr="{{.TRACKER}}:30003" -http="{{.WEBSERVER}}" -lat="{{.LAT}}" -lon="{{.LON}}" -proximity-km="{{.PROXIMITY_KM}}" -push-notification-url="{{.PUSH_URL}}" -firestore-project="{{.PROJECT}}" -firestore-credentials="{{.CREDENTIALS}}" {{.CLI_ARGS}}
 
+    test-functions:
+        desc: Run unit tests for Firebase Cloud Functions
+        dir: cloud-functions/functions
+        cmds:
+            - npm test
+
+    deploy-functions:
+        desc: Build and deploy Firebase Cloud Functions to production
+        dir: cloud-functions
+        cmds:
+            - npx -y firebase-tools@latest deploy --only functions
