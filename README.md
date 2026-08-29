@@ -237,8 +237,13 @@ flights-overhead/
     ├── build.gradle.kts                # Android root Gradle configuration
     └── app/                            # App module (Jetpack Compose, Navigation3, Firestore, FCM)
         └── src/main/java/com/kypeli/flightsoverhead/
-            ├── repository/             # FlightsRepository (Firestore Flow streaming), TokenRepository
-            ├── service/                # FlightsFirebaseMessagingService & FlightsNotificationManager
+            ├── api/                    # Ktor HTTP clients & DTOs (token registration, flight fetch)
+            ├── data/                   # Flight/User models & airline logo resolver
+            ├── di/                     # Metro dependency injection graphs, scopes & providers
+            ├── entity/                 # Domain entities (e.g. FlightPath)
+            ├── navigation/             # Navigation3 route entries
+            ├── repository/             # FlightsRepository (Firestore Flow streaming), TokenRepository, AuthRepository
+            ├── service/                # FCM messaging, notification manager & device registration services
             ├── ui/                     # Jetpack Compose UI (FlightListScreen, FlightRow, LoginScreen)
             └── viewmodel/              # FlightsViewModel & AuthViewModel
 ```
@@ -278,9 +283,9 @@ firebase deploy --only firestore:rules
 
 The companion Android mobile app lives in `android/` and is built with:
 * **Jetpack Compose Material 3** & **Navigation3** for reactive and modern UI.
-* **Cloud Firestore Real-Time Streaming**: Direct `callbackFlow` snapshot listener on `active_flights` to stream live aircraft updates without polling.
+* **Cloud Firestore Real-Time Streaming**: Direct `callbackFlow` snapshot listener on `active_flights` to stream live aircraft updates without polling, with cache-aware loading and refresh states shown while waiting for fresh server data.
 * **Live Flight Telemetry**: Dynamic `FlightRow` displaying operator logo/fallback avatar, flight number, origin/destination airport codes, flight path status chip (Climbing, Descending, Cruising), altitude in meters/feet, distance in km, heading, aircraft model description, registration, squawk, and ICAO hex code.
-* **Firebase Messaging & Installations**: Handles FCM push notification delivery via `FlightsNotificationManager` with expandable rich text, automatic dismissal, deep linking, and device metadata registration.
+* **Firebase Messaging & Installations**: Handles FCM push notification delivery via `FlightsNotificationManager` with expandable rich text, automatic dismissal on tap and for flights that leave active tracking, deep linking, and device metadata registration.
 * **Firebase Auth**: User authentication (Email/Password) with Compose Previews.
 * **Metro**: Lightweight dependency injection.
 

@@ -10,7 +10,7 @@ The `flights-overhead` project is an end-to-end flight tracking system. It conne
 ---
 
 ## ⚙️ Technology Stack
-* **Go Backend**: Go 1.26.3 (tested with local toolchain 1.26.4)
+* **Go Backend**: Go 1.26.4
   * Uses standard library packages along with Google Cloud & Cloud Firestore integrations:
     * `cloud.google.com/go/firestore` for Firebase real-time document synchronization.
     * `google.golang.org/api/idtoken` & `google.golang.org/api/option` for Google Service Account OIDC ID token generation and credential management.
@@ -19,8 +19,8 @@ The `flights-overhead` project is an end-to-end flight tracking system. It conne
     * `sync.RWMutex` & `sync.Mutex` for thread-safe concurrent registry maps and deduplication caches.
     * `text/tabwriter` for clean console dashboards.
     * `net/http` for the embedded web dashboard, SSE broker, test push endpoint, and outbound API calls to adsbdb.com / Cloud Functions.
-* **Firebase Functions**: Node.js 22, TypeScript, [firebase-functions](https://www.npmjs.com/package/firebase-functions) v2 API, `google-auth-library` (Service Account OIDC validation), `firebase-admin/messaging` (multicast FCM push notifications).
-* **Android Mobile App**: Kotlin, Jetpack Compose Material 3, Navigation3, Metro DI, Ktor Client (OkHttp engine), Firebase Auth, Cloud Firestore SDK (`callbackFlow` real-time streaming), Firebase Messaging (`FlightsNotificationManager`), Firebase Installations, Coil.
+* **Firebase Functions**: Node.js 22, TypeScript, [firebase-functions](https://www.npmjs.com/package/firebase-functions) v7 (v2 API), `google-auth-library` (Service Account OIDC validation), `firebase-admin/messaging` (multicast FCM push notifications), ESLint 10 (flat config).
+* **Android Mobile App**: Kotlin, Jetpack Compose Material 3, Navigation3, Metro DI, Ktor Client (OkHttp engine), Firebase Auth, Cloud Firestore SDK (`callbackFlow` real-time streaming), Firebase Messaging (`FlightsNotificationManager`), Firebase Installations, Coil, Timber (logging), kotlinx.serialization (JSON parsing).
 * **External HTTP API**: [adsbdb.com](https://api.adsbdb.com/v0) — queried at runtime for aircraft metadata (manufacturer, registration, owner) and flight route (origin/destination airports) via `/aircraft/{hex}` and `/callsign/{callsign}` endpoints. Calls are rate-limited (max 2 req/s) and in-memory cached.
 
 ---
@@ -85,7 +85,7 @@ flights-overhead/
 │       │   ├── token.ts                     # POST /token: FID & device metadata registration endpoint
 │       │   ├── validation.ts                # Document ID & platform validation rules
 │       │   └── push-notification.ts          # POST /pushNotification: FCM proximity multicast trigger
-│       └── test/                            # Unit tests (http, flights, token, push-notification, validation)
+│       └── test/                            # Unit tests (http, flights, token, push-notification, validation) + shared helpers
 └── android/                                 # Native Android client (Jetpack Compose & Kotlin)
     ├── build.gradle.kts                     # Root Gradle build configuration
     ├── settings.gradle.kts                  # Android project settings & module configuration
@@ -95,23 +95,20 @@ flights-overhead/
             ├── main/java/com/kypeli/flightsoverhead/
             │   ├── FlightsOverheadApplication.kt # Application class & DI initialization
             │   ├── MainActivity.kt          # Single activity hosting Compose Navigation3 & notification handling
-            │   ├── api/                     # Ktor HTTP client & DTO definitions (TokenApi, TokenDto)
-            │   ├── data/                    # Data models (Flight) and airline resolver
-            │   ├── di/                      # Metro dependency injection graphs and scopes
+            │   ├── api/                     # Ktor HTTP clients, endpoints & DTOs (TokenApi, TokenDto, FlightsApi, FlightDto)
+            │   ├── data/                    # AirlineResolver (logo lookup) and data models (Flight, User in data/model/)
+            │   ├── di/                      # Metro dependency injection graphs, scopes, and providers
             │   ├── entity/                  # Domain entities (e.g. FlightPath)
             │   ├── navigation/              # Navigation3 route entries
-            │   ├── repository/              # FlightsRepository (Firestore Flow streaming), TokenRepository
-            │   ├── service/                 # FlightsFirebaseMessagingService & FlightsNotificationManager
-            │   ├── ui/                      # Jetpack Compose UI (screens, theme, components)
+            │   ├── repository/              # FlightsRepository (Firestore Flow streaming), TokenRepository, AuthRepository
+            │   ├── service/                 # FlightsFirebaseMessagingService, FlightsNotificationManager, FlightNotificationService, TokenService
+            │   ├── ui/                      # Jetpack Compose UI (screens, theme, components incl. FlightRow, LoadingState)
             │   └── viewmodel/               # FlightsViewModel and AuthViewModel
             └── test/java/com/kypeli/flightsoverhead/
                 ├── TokenDtoTest.kt          # Unit tests for Token API serialization
-                ├── repository/
-                │   └── FlightsRepositoryTest.kt # Unit tests for Firestore snapshot listener & mapper
-                ├── service/
-                │   └── FlightsNotificationManagerTest.kt # Unit tests for notification titles, bodies & extras
-                └── viewmodel/
-                    └── FlightsViewModelTest.kt # Unit tests for ViewModel state flows & auth lifecycle
+                ├── repository/              # Unit tests (FlightsRepository, TokenRepository)
+                ├── service/                 # Unit tests (notifications, token registration)
+                └── viewmodel/               # Unit tests (FlightsViewModel, AuthViewModel)
 ```
 
 ---
@@ -233,8 +230,10 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
 ### 11. Android Mobile Client (`android/`)
 * Native Android client developed in Kotlin with Jetpack Compose Material 3 and Navigation3.
 * Architecture: MVVM with reactive UI state and repository abstractions.
-  * **`FlightsRepository` & Real-Time Firestore Streaming**: Uses Firestore's `addSnapshotListener` on `active_flights` exposed as a Kotlin coroutines `Flow<Result<List<Flight>>>` via `callbackFlow`. Automatically streams live flight movements and deletions directly to the UI without polling.
-  * **`FlightsNotificationManager`**: Handles notification channel creation (`flights_overhead_channel`), rich notification layout formatting (`Operator • Callsign`, `From Origin • X.X km away`), `BigTextStyle` multi-line expansion, and automatic dismissal on tap.
+  * **`FlightsRepository` & Real-Time Firestore Streaming**: Uses Firestore's `addSnapshotListener` (with `MetadataChanges.INCLUDE`) on `active_flights`, exposed as a Kotlin coroutines `Flow<Result<FlightsSnapshot>>` via `callbackFlow`. Each emission carries the flight list plus an `isFromCache` flag so the UI can distinguish locally cached snapshots from fresh server data. Automatically streams live flight movements and deletions directly to the UI without polling. Also provides a one-shot `fetchActiveFlights()` that calls the authenticated `overheadFlights` Cloud Function via `FlightsApi`.
+  * **`FlightsViewModel`**: Holds the `UiState` (flights, error, `isLoading`, `isRefreshing`) and cancels notifications for flights that disappear from the active set. On app resume it arms a transient refreshing state that clears once a fresh (non-cached) snapshot arrives (or after a 5-second timeout), rendering the `LoadingState` component over stale cached data instead of flashing an empty list.
+  * **`FlightsNotificationManager`**: Handles notification channel creation (`flights_overhead_channel`), rich notification layout formatting (`Operator • Callsign`, `From Origin • X.X km away`), `BigTextStyle` multi-line expansion, automatic dismissal on tap, and automatic dismissal of notifications for flights that are no longer actively tracked.
+  * **`FlightNotificationService`**: `ViewModelScope`-bound injectable interface (Metro) wrapping `FlightsNotificationManager` for showing and cancelling notifications by hex or for inactive flights.
   * **`FlightsFirebaseMessagingService`**: Receives incoming FCM messages, extracts telemetry, and delegates display to `FlightsNotificationManager`.
   * **`TokenRepository` & `TokenService`**: Collects hardware device metadata (`DeviceInfoDto`) and registers client Firebase Installation IDs with the backend.
   * **`FlightRow` Component**: Renders live telemetry cards with airline avatar / fallback initials, flight number, origin/destination airport code badges, flight path status chips (Climbing, Descending, Cruising based on vertical rate), altitude in meters, distance in km, heading, model description, registration, squawk, and ICAO hex code.
