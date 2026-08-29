@@ -3,6 +3,7 @@ package com.kypeli.flightsoverhead.repository
 import com.google.android.gms.tasks.Task
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.MetadataChanges
 import com.kypeli.flightsoverhead.api.FlightDto
 import com.kypeli.flightsoverhead.data.model.Flight
 import com.kypeli.flightsoverhead.di.scope.ViewModelScope
@@ -19,9 +20,14 @@ import com.kypeli.flightsoverhead.entity.FlightPath
 import kotlin.math.roundToInt
 
 interface FlightsRepository {
-    fun getActiveFlightsFlow(): Flow<Result<List<Flight>>>
+    fun getActiveFlightsFlow(): Flow<Result<FlightsSnapshot>>
     suspend fun fetchActiveFlights(): Result<List<Flight>>
 }
+
+data class FlightsSnapshot(
+    val flights: List<Flight>,
+    val isFromCache: Boolean,
+)
 
 @ContributesBinding(ViewModelScope::class)
 @Inject
@@ -29,9 +35,9 @@ class FlightsRepositoryImpl(
     private val firestore: FirebaseFirestore,
 ) : FlightsRepository {
 
-    override fun getActiveFlightsFlow(): Flow<Result<List<Flight>>> = callbackFlow {
+    override fun getActiveFlightsFlow(): Flow<Result<FlightsSnapshot>> = callbackFlow {
         val listenerRegistration = firestore.collection("active_flights")
-            .addSnapshotListener { snapshot, error ->
+            .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
                 if (error != null) {
                     trySend(Result.failure(error))
                     return@addSnapshotListener
@@ -40,7 +46,14 @@ class FlightsRepositoryImpl(
                     val flights = snapshot.documents.map { doc ->
                         doc.toFlightDto().toFlight()
                     }
-                    trySend(Result.success(flights))
+                    trySend(
+                        Result.success(
+                            FlightsSnapshot(
+                                flights = flights,
+                                isFromCache = snapshot.metadata.isFromCache,
+                            )
+                        )
+                    )
                 }
             }
 

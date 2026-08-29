@@ -19,15 +19,20 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kypeli.flightsoverhead.data.model.Flight
 import com.kypeli.flightsoverhead.ui.components.AuthenticationErrorState
 import com.kypeli.flightsoverhead.ui.components.EmptyState
 import com.kypeli.flightsoverhead.ui.components.FlightRow
+import com.kypeli.flightsoverhead.ui.components.LoadingState
 import com.kypeli.flightsoverhead.ui.theme.FlightsOverheadTheme
 import com.kypeli.flightsoverhead.viewmodel.FlightsViewModel
 import com.kypeli.flightsoverhead.viewmodel.UiState
@@ -40,6 +45,24 @@ fun FlightListScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // Re-arm the "stale data" loading state when returning from the background.
+    // LifecycleResumeEffect also fires on the initial resume, so the first call
+    // is skipped: the initial load state already covers first entry, and
+    // re-arming here would keep the loader up over cached data until the server
+    // round-trip (or the 5s timeout). Dialog pauses keep the lifecycle RESUMED,
+    // so they don't re-arm either.
+    var hasResumed by remember { mutableStateOf(false) }
+    LifecycleResumeEffect(Unit) {
+        if (hasResumed) {
+            viewModel.onAppResume()
+        }
+        hasResumed = true
+
+        onPauseOrDispose {
+            // No cleanup needed: all state lives in the ViewModel.
+        }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -60,6 +83,10 @@ fun FlightListScreen(
                     )
                 }
             }
+        } else if (uiState.isLoading || uiState.isRefreshing) {
+            LoadingState(
+                modifier = Modifier.padding(innerPadding),
+            )
         } else {
             FlightsScreenContent(
                 flights = uiState.flights,
@@ -201,6 +228,28 @@ fun FlightListScreenPreview() {
         ) { innerPadding ->
             FlightsScreenContent(
                 flights = mockFlights,
+                modifier = Modifier.padding(innerPadding),
+            )
+        }
+    }
+}
+
+@Preview(
+    name = "Phone loading",
+    showBackground = true,
+    widthDp = 412,
+    heightDp = 840,
+)
+@Composable
+fun FlightListScreenLoadingPreview() {
+    FlightsOverheadTheme {
+        Scaffold(
+            topBar = {
+                FlightListTopAppBar(onSignOut = {})
+            },
+            containerColor = MaterialTheme.colorScheme.background,
+        ) { innerPadding ->
+            LoadingState(
                 modifier = Modifier.padding(innerPadding),
             )
         }
