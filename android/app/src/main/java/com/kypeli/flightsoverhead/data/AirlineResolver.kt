@@ -1,9 +1,11 @@
 package com.kypeli.flightsoverhead.data
 
 import android.content.Context
+import com.kypeli.flightsoverhead.BuildConfig
 import dev.zacsweers.metro.Inject
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import timber.log.Timber
 
@@ -39,20 +41,19 @@ class AirlineResolver(
             val entries = json.decodeFromString<List<AirlineEntry>>(jsonString)
             val map = mutableMapOf<String, AirlineInfo>()
             for (entry in entries) {
-                if (entry.id.isBlank() && entry.name.isBlank()) continue
                 val info = AirlineInfo(entry.name, entry.logoUrl)
-                if (entry.name.isNotBlank()) {
-                    map[entry.name.trim().lowercase()] = info
-                    map[entry.name.trim()] = info
-                }
-                if (entry.id.isNotBlank()) {
-                    map[entry.id.trim().lowercase()] = info
-                    map[entry.id.trim()] = info
-                }
+                if (entry.id.isNotBlank()) map[entry.id.trim().lowercase()] = info
+                if (entry.name.isNotBlank()) map[entry.name.trim().lowercase()] = info
             }
             map
+        } catch (e: SerializationException) {
+            Timber.e(e, "Failed to serialize $ASSET_FILE_NAME")
+            if (BuildConfig.DEBUG) {
+                throw IllegalStateException("Could not parse $ASSET_FILE_NAME")
+            }
+            emptyMap()
         } catch (e: Exception) {
-            Timber.e(e, "Failed to load %s", ASSET_FILE_NAME)
+            Timber.e(e, "Failed to load $ASSET_FILE_NAME")
             emptyMap()
         }
     }
@@ -61,12 +62,15 @@ class AirlineResolver(
      * Resolves the airline logo URL based on the airline name or flight number.
      * e.g. "Finnair" -> logo for AY, or "AY123" -> logo for AY from airlines.json.
      */
-    fun getLogoUrl(airlineName: String, flightNumber: String = ""): String {
+    fun getLogoUrl(
+        airlineName: String,
+        flightNumber: String = "",
+    ): String {
         val trimmedAirline = airlineName.trim()
         val trimmedFlightNumber = flightNumber.trim()
 
         if (trimmedAirline.isNotBlank()) {
-            val info = airlineMap[trimmedAirline.lowercase()] ?: airlineMap[trimmedAirline]
+            val info = airlineMap[trimmedAirline.lowercase()]
             if (info != null && info.logoUrl.isNotBlank()) {
                 return info.logoUrl
             }
@@ -93,4 +97,3 @@ class AirlineResolver(
         return ""
     }
 }
-
