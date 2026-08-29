@@ -1,7 +1,7 @@
 {
   "name": "functions",
   "scripts": {
-    "lint": "eslint --ext .js,.ts .",
+    "lint": "eslint .",
     "test": "npm run build && node --experimental-strip-types --test test/**/*.test.ts",
     "build": "tsc",
     "build:watch": "tsc --watch",
@@ -16,18 +16,19 @@
   },
   "main": "lib/index.js",
   "dependencies": {
-    "firebase-admin": "^13.10.0",
+    "firebase-admin": "^14.3.0",
     "firebase-functions": "^7.3.2",
-    "google-auth-library": "^9.15.1"
+    "google-auth-library": "^11.0.2"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@typescript-eslint/eslint-plugin": "^8.67.0",
     "@typescript-eslint/parser": "^8.67.0",
-    "eslint": "^8.57.1",
-    "eslint-config-google": "^0.14.0",
-    "eslint-plugin-import": "^2.32.0",
-    "firebase-functions-test": "^3.5.0",
-    "typescript": "^6.0.3"
+    "eslint": "^10.9.1",
+    "eslint-plugin-import-x": "^4.17.1",
+    "globals": "^17.11.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.68.0"
   },
   "private": true
 }
