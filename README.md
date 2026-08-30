@@ -190,6 +190,7 @@ flights-overhead/
 ├── backend/                            # Go ADS-B tracker (module: flights-overhead)
 │   ├── main.go                         # CLI entrypoint and event loop
 │   ├── go.mod                          # Go module definition
+│   ├── flights-overhead.service.template # Systemd service unit configuration template
 │   ├── broadcast/
 │   │   ├── broadcaster.go              # FlightsReceiver interface and snapshot fan-out
 │   │   ├── SSEFlightsReceiver.go       # Distance/sort enrichment, SSE payload serialiser
@@ -220,7 +221,6 @@ flights-overhead/
 │   ├── .firebaserc                     # Firebase project alias
 │   ├── firestore.rules                 # Firestore security rules
 │   ├── firestore.indexes.json          # Firestore index definitions
-│   ├── flights-overhead.service.template # Systemd service unit configuration template
 │   └── functions/                      # Firebase Cloud Functions (TypeScript)
 │       ├── package.json                # Node.js dependencies and lifecycle scripts
 │       ├── tsconfig.json               # TypeScript compilation configuration
@@ -306,7 +306,7 @@ Deploy `flights-overhead` to a Raspberry Pi running headless:
 
 1. Copy and configure the systemd unit file from the template:
    ```bash
-   cp cloud-functions/flights-overhead.service.template cloud-functions/flights-overhead.service
+   cp backend/flights-overhead.service.template backend/flights-overhead.service
    # Edit with your actual tracker IP, coordinates, project ID, and credentials path
    ```
 2. Deploy the binary and systemd service:

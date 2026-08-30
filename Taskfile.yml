@@ -32,7 +32,7 @@ tasks:
             PI_HOST: '{{.PI_HOST | default "pi24-bookworm.local"}}'
             PI_USER: '{{.PI_USER | default "pi"}}'
         cmds:
-            - scp cloud-functions/flights-overhead.service {{.PI_USER}}@{{.PI_HOST}}:/tmp/flights-overhead.service
+            - scp backend/flights-overhead.service {{.PI_USER}}@{{.PI_HOST}}:/tmp/flights-overhead.service
             - ssh {{.PI_USER}}@{{.PI_HOST}} "sudo mv /tmp/flights-overhead.service /etc/systemd/system/flights-overhead.service && sudo systemctl daemon-reload && sudo systemctl enable flights-overhead.service && sudo systemctl restart flights-overhead.service"
 
     restart-pi:

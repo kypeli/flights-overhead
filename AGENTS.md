@@ -37,6 +37,7 @@ flights-overhead/
 ├── service-account-key.json                 # Firestore service account key (gitignored, repo root)
 ├── backend/                                 # Go ADS-B tracker (module: flights-overhead)
 │   ├── go.mod                               # Go module definition
+│   ├── flights-overhead.service.template    # Systemd service unit template for Raspberry Pi deployment
 │   ├── main.go                              # Application orchestrator, CLI entrypoint, and receiver creation
 │   ├── broadcast/
 │   │   ├── broadcaster.go                   # FlightsReceiver interface; Broadcast() snapshot fan-out
@@ -73,7 +74,6 @@ flights-overhead/
 │   ├── .firebaserc                          # Firebase project alias (default: flights-overhead)
 │   ├── firestore.rules                      # Firestore security rules (read allowed for authenticated clients)
 │   ├── firestore.indexes.json               # Firestore index definitions
-│   ├── flights-overhead.service.template    # Systemd service unit template for Raspberry Pi deployment
 │   └── functions/                           # Firebase Cloud Functions (TypeScript)
 │       ├── package.json                     # Node.js dependencies and lifecycle scripts
 │       ├── tsconfig.json                    # TypeScript compilation configuration
