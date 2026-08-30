@@ -284,7 +284,7 @@ firebase deploy --only firestore:rules
 The companion Android mobile app lives in `android/` and is built with:
 * **Jetpack Compose Material 3** & **Navigation3** for reactive and modern UI.
 * **Cloud Firestore Real-Time Streaming**: Direct `callbackFlow` snapshot listener on `active_flights` to stream live aircraft updates without polling, with cache-aware loading and refresh states shown while waiting for fresh server data.
-* **Live Flight Telemetry**: Dynamic `FlightRow` displaying operator logo/fallback avatar, flight number, origin/destination airport codes, flight path status chip (Climbing, Descending, Cruising), altitude in meters/feet, distance in km, heading, aircraft model description, registration, squawk, and ICAO hex code.
+* **Live Flight Telemetry & Radar Lookup**: Dynamic `FlightRow` displaying operator logo/fallback avatar, flight number, origin/destination airport codes, flight path status chip (Climbing, Descending, Cruising), altitude in meters/feet, distance in km, heading, aircraft model description, registration, squawk, and ICAO hex code. Tapping any flight row opens the aircraft's live tracking page on Flightradar24 in the external browser.
 * **Firebase Messaging & Installations**: Handles FCM push notification delivery via `FlightsNotificationManager` with expandable rich text, automatic dismissal on tap and for flights that leave active tracking, deep linking, and device metadata registration.
 * **Firebase Auth**: User authentication (Email/Password) with Compose Previews.
 * **Metro**: Lightweight dependency injection.

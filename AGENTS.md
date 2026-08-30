@@ -236,7 +236,7 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
   * **`FlightNotificationService`**: `ViewModelScope`-bound injectable interface (Metro) wrapping `FlightsNotificationManager` for showing and cancelling notifications by hex or for inactive flights.
   * **`FlightsFirebaseMessagingService`**: Receives incoming FCM messages, extracts telemetry, and delegates display to `FlightsNotificationManager`.
   * **`TokenRepository` & `TokenService`**: Collects hardware device metadata (`DeviceInfoDto`) and registers client Firebase Installation IDs with the backend.
-  * **`FlightRow` Component**: Renders live telemetry cards with airline avatar / fallback initials, flight number, origin/destination airport code badges, flight path status chips (Climbing, Descending, Cruising based on vertical rate), altitude in meters, distance in km, heading, model description, registration, squawk, and ICAO hex code.
+  * **`FlightRow` Component**: Renders live telemetry cards with airline avatar / fallback initials, flight number, origin/destination airport code badges, flight path status chips (Climbing, Descending, Cruising based on vertical rate), altitude in meters, distance in km, heading, model description, registration, squawk, and ICAO hex code. Tapping a flight row resolves its callsign / flight number / hex identifier via `Flight.flightradar24Url` and opens the live aircraft tracking page on Flightradar24 (`https://www.flightradar24.com/<callsign>/`) in the device's external browser.
   * **`LoginScreen`**: Firebase Authentication interface with Jetpack Compose Previews.
 
 ---
