@@ -17,5 +17,15 @@ data class Flight(
     val registration: String = "",
     val hex: String = "",
     val logoUrl: String = "",
-)
+    val callsign: String = "",
+) {
+    val flightradar24Url: String?
+        get() {
+            val identifier =
+                callsign.takeIf { it.isNotBlank() }
+                    ?: flightNumber.takeIf { it.isNotBlank() && it != "N/A" && it != "---" }
+                    ?: hex.takeIf { it.isNotBlank() }
+            return identifier?.let { "https://www.flightradar24.com/${it.trim()}/" }
+        }
+}
 

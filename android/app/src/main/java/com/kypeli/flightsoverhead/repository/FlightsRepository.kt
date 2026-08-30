@@ -177,6 +177,7 @@ internal fun FlightDto.toFlight(): Flight {
         aircraftModel = modelDescription,
         registration = registration.trim(),
         hex = hex.trim(),
+        callsign = callsign.trim(),
     )
 }
 

@@ -1,6 +1,7 @@
 package com.kypeli.flightsoverhead.repository
 
 import com.kypeli.flightsoverhead.api.FlightDto
+import com.kypeli.flightsoverhead.data.model.Flight
 import com.kypeli.flightsoverhead.entity.FlightPath
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -49,6 +50,7 @@ class FlightsRepositoryTest {
         assertEquals("AIRBUS A350-900", flight.aircraftModel)
         assertEquals("OH-LWA", flight.registration)
         assertEquals("4601F6", flight.hex)
+        assertEquals("FIN123", flight.callsign)
     }
 
     @Test
@@ -113,5 +115,48 @@ class FlightsRepositoryTest {
         assertEquals("---", flightEmpty.destinationCode)
         assertEquals("4601F6", flightEmpty.flightNumber)
         assertEquals("Unknown Airline", flightEmpty.airline)
+    }
+
+    @Test
+    fun flightradar24Url_resolvesCallsignFirst() {
+        val flight = Flight(
+            airline = "Finnair",
+            flightNumber = "AY123",
+            departure = "Helsinki",
+            arrival = "London",
+            hex = "4601F6",
+            callsign = "FIN123",
+        )
+        assertEquals("https://www.flightradar24.com/FIN123/", flight.flightradar24Url)
+    }
+
+    @Test
+    fun flightradar24Url_fallsBackToFlightNumberAndHex() {
+        val flightWithFlightNumber = Flight(
+            airline = "Finnair",
+            flightNumber = "AY123",
+            departure = "Helsinki",
+            arrival = "London",
+            hex = "4601F6",
+        )
+        assertEquals("https://www.flightradar24.com/AY123/", flightWithFlightNumber.flightradar24Url)
+
+        val flightWithHexOnly = Flight(
+            airline = "Unknown",
+            flightNumber = "N/A",
+            departure = "---",
+            arrival = "---",
+            hex = "4601F6",
+        )
+        assertEquals("https://www.flightradar24.com/4601F6/", flightWithHexOnly.flightradar24Url)
+
+        val emptyFlight = Flight(
+            airline = "Unknown",
+            flightNumber = "",
+            departure = "",
+            arrival = "",
+            hex = "",
+        )
+        org.junit.Assert.assertNull(emptyFlight.flightradar24Url)
     }
 }

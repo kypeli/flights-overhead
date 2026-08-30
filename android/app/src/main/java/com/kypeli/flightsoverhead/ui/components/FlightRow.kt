@@ -1,5 +1,8 @@
 package com.kypeli.flightsoverhead.ui.components
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -37,6 +41,7 @@ import com.kypeli.flightsoverhead.data.model.Flight
 import com.kypeli.flightsoverhead.entity.FlightPath
 import com.kypeli.flightsoverhead.ui.theme.DataMonoStyle
 import com.kypeli.flightsoverhead.ui.theme.FlightsOverheadTheme
+import timber.log.Timber
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -44,8 +49,15 @@ import java.util.Locale
 fun FlightRow(
     flight: Flight,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
+    val context = LocalContext.current
+    val clickHandler: () -> Unit = onClick ?: {
+        flight.flightradar24Url?.let { url -> context.openUrl(url) }
+    }
+
     Card(
+        onClick = clickHandler,
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -385,6 +397,18 @@ fun FlightRowPreview() {
                     ),
             )
         }
+    }
+}
+
+private fun Context.openUrl(url: String) {
+    val intent =
+        Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+    try {
+        startActivity(intent)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to open URL: %s", url)
     }
 }
 
