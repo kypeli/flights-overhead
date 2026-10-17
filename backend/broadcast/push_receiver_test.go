@@ -224,3 +224,99 @@ func TestPushNotificationReceiver_DispatchTestNotification(t *testing.T) {
 	}
 }
 
+func TestPushNotificationReceiver_EnrichmentGracePeriod(t *testing.T) {
+	var receivedPayloads []PushNotificationPayload
+	var mu sync.Mutex
+
+	mockClient := &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) *http.Response {
+			body, _ := io.ReadAll(r.Body)
+			var payload PushNotificationPayload
+			_ = json.Unmarshal(body, &payload)
+
+			mu.Lock()
+			receivedPayloads = append(receivedPayloads, payload)
+			mu.Unlock()
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"success": true}`)),
+				Header:     make(http.Header),
+			}
+		}),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	receiver := NewPushNotificationReceiver(ctx, PushReceiverConfig{
+		BaseLat:               60.1699,
+		BaseLon:               24.9384,
+		ProximityThresholdKM:  10.0,
+		EndpointURL:           "http://mock-cloud-function/pushNotification",
+		HTTPClient:            mockClient,
+		EnrichmentGracePeriod: 120 * time.Millisecond,
+	})
+
+	// 1. Flight spotted with position (MSG,3), but callsign/route not yet enriched
+	unEnriched := data.FlightJSON{
+		Aircraft: sbs.Aircraft{
+			HexIdent:    "4601F6",
+			Latitude:    60.1990,
+			Longitude:   24.9340,
+			HasPosition: true,
+			FirstSeen:   time.Now(),
+		},
+	}
+
+	receiver.Send([]data.FlightJSON{unEnriched})
+	time.Sleep(30 * time.Millisecond)
+
+	if receiver.IsNotified("4601F6") {
+		t.Fatalf("expected 4601F6 to wait for enrichment during grace period")
+	}
+
+	// 2. Next tick: callsign and route arrive before grace period expires -> dispatches immediately
+	enriched := unEnriched
+	enriched.Callsign = "FIN123"
+	enriched.Operator = "Finnair"
+	enriched.OriginIATA = "HEL"
+
+	receiver.Send([]data.FlightJSON{enriched})
+	time.Sleep(30 * time.Millisecond)
+
+	if !receiver.IsNotified("4601F6") {
+		t.Fatalf("expected 4601F6 to be notified immediately once enriched")
+	}
+
+	mu.Lock()
+	if len(receivedPayloads) != 1 || receivedPayloads[0].Operator != "Finnair" || receivedPayloads[0].OriginIATA != "HEL" {
+		t.Errorf("expected enriched payload with Finnair/HEL, got %+v", receivedPayloads)
+	}
+	mu.Unlock()
+
+	// 3. Another flight never receives enrichment -> still notifies after grace period expires
+	unEnriched2 := data.FlightJSON{
+		Aircraft: sbs.Aircraft{
+			HexIdent:    "ABCDEF",
+			Latitude:    60.1990,
+			Longitude:   24.9340,
+			HasPosition: true,
+			FirstSeen:   time.Now(),
+		},
+	}
+	receiver.Send([]data.FlightJSON{enriched, unEnriched2})
+	if receiver.IsNotified("ABCDEF") {
+		t.Fatalf("expected ABCDEF not to be notified before grace period expires")
+	}
+
+	time.Sleep(150 * time.Millisecond)
+	receiver.Send([]data.FlightJSON{enriched, unEnriched2})
+	time.Sleep(30 * time.Millisecond)
+
+	if !receiver.IsNotified("ABCDEF") {
+		t.Fatalf("expected ABCDEF to be notified after grace period expired")
+	}
+}
+
+

@@ -19,6 +19,7 @@ class FlightsOverheadApplication : Application() {
             Timber.plant(Timber.DebugTree())
         }
         FlightsNotificationManager.createNotificationChannel(this)
+
         appGraph = createGraphFactory<AppGraph.Factory>().create(this)
         viewModelGraph = appGraph.createViewModelGraph()
         viewModelGraph.tokenService.startObserving()

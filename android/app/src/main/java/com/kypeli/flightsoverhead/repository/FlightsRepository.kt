@@ -9,6 +9,7 @@ import com.kypeli.flightsoverhead.data.model.Flight
 import com.kypeli.flightsoverhead.di.scope.ViewModelScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -29,6 +30,7 @@ data class FlightsSnapshot(
     val isFromCache: Boolean,
 )
 
+@SingleIn(ViewModelScope::class)
 @ContributesBinding(ViewModelScope::class)
 @Inject
 class FlightsRepositoryImpl(

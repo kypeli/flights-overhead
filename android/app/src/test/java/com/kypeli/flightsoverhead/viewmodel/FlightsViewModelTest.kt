@@ -369,4 +369,39 @@ class FlightsViewModelTest {
         assertFalse(viewModel.uiState.value.isRefreshing)
         assertTrue(viewModel.uiState.value.flights.isEmpty())
     }
+
+    @Test
+    fun onAppPause_stopsObservingAndOnAppResume_reAttachesListener() = runTest {
+        val fakeAuth = FakeAuthRepository(initialUser = User(uid = "1", email = "test@example.com"))
+        val fakeRepo = FakeFlightsRepository()
+        val fakeNotificationService = FakeFlightNotificationService()
+        val flight1 = Flight(airline = "Finnair", flightNumber = "AY123", departure = "Helsinki", arrival = "London", hex = "4601F6")
+        fakeRepo.flightsFlow.value = successSnapshot(listOf(flight1))
+        val airlineResolver = AirlineResolver(createDummyContext())
+
+        val viewModel = FlightsViewModel(fakeRepo, airlineResolver, fakeAuth, fakeNotificationService)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.isObserving)
+        assertEquals(1, viewModel.uiState.value.flights.size)
+
+        // Pause the app (backgrounded)
+        viewModel.onAppPause()
+        assertFalse(viewModel.isObserving)
+
+        // Updates while paused are not collected until resumed
+        val flight2 = Flight(airline = "British Airways", flightNumber = "BAW227", departure = "London", arrival = "New York", hex = "4006EA")
+        fakeRepo.flightsFlow.value = successSnapshot(listOf(flight1, flight2), isFromCache = false)
+        runCurrent()
+        assertEquals(1, viewModel.uiState.value.flights.size)
+
+        // Resume the app -> re-attaches listener and receives fresh snapshot
+        viewModel.onAppResume()
+        assertTrue(viewModel.isObserving)
+        runCurrent()
+
+        assertEquals(2, viewModel.uiState.value.flights.size)
+        assertFalse(viewModel.uiState.value.isRefreshing)
+    }
 }
+

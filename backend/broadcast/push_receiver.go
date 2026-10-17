@@ -14,14 +14,17 @@ import (
 	"flights-overhead/pkg/sbs"
 )
 
+const defaultEnrichmentGracePeriod = 5 * time.Second
+
 // PushReceiverConfig holds configuration for the PushNotificationReceiver.
 type PushReceiverConfig struct {
-	BaseLat              float64
-	BaseLon              float64
-	ProximityThresholdKM float64
-	EndpointURL          string
-	HTTPClient           *http.Client
-	AuthToken            string
+	BaseLat               float64
+	BaseLon               float64
+	ProximityThresholdKM  float64
+	EndpointURL           string
+	HTTPClient            *http.Client
+	AuthToken             string
+	EnrichmentGracePeriod time.Duration
 }
 
 // PushNotificationPayload is the JSON request body sent to the push notification endpoint.
@@ -35,16 +38,18 @@ type TestPushSender interface {
 // PushNotificationReceiver implements FlightsReceiver to dispatch push notifications
 // when an aircraft enters the defined proximity radius around the SBS-1 base station.
 type PushNotificationReceiver struct {
-	ctx                  context.Context
-	baseLat              float64
-	baseLon              float64
-	proximityThresholdKM float64
-	endpointURL          string
-	httpClient           *http.Client
-	authToken            string
+	ctx                   context.Context
+	baseLat               float64
+	baseLon               float64
+	proximityThresholdKM  float64
+	endpointURL           string
+	httpClient            *http.Client
+	authToken             string
+	enrichmentGracePeriod time.Duration
 
-	mu       sync.Mutex
-	notified map[string]bool
+	mu           sync.Mutex
+	notified     map[string]bool
+	pendingSince map[string]time.Time
 }
 
 // Ensure PushNotificationReceiver implements TestPushSender.
@@ -57,20 +62,38 @@ func NewPushNotificationReceiver(ctx context.Context, cfg PushReceiverConfig) *P
 		client = &http.Client{Timeout: 10 * time.Second}
 	}
 
+	gracePeriod := cfg.EnrichmentGracePeriod
+	if gracePeriod == 0 {
+		gracePeriod = defaultEnrichmentGracePeriod
+	}
+
 	return &PushNotificationReceiver{
-		ctx:                  ctx,
-		baseLat:              cfg.BaseLat,
-		baseLon:              cfg.BaseLon,
-		proximityThresholdKM: cfg.ProximityThresholdKM,
-		endpointURL:          cfg.EndpointURL,
-		httpClient:           client,
-		authToken:            cfg.AuthToken,
-		notified:             make(map[string]bool),
+		ctx:                   ctx,
+		baseLat:               cfg.BaseLat,
+		baseLon:               cfg.BaseLon,
+		proximityThresholdKM:  cfg.ProximityThresholdKM,
+		endpointURL:           cfg.EndpointURL,
+		httpClient:            client,
+		authToken:             cfg.AuthToken,
+		enrichmentGracePeriod: gracePeriod,
+		notified:              make(map[string]bool),
+		pendingSince:          make(map[string]time.Time),
 	}
 }
 
+// isEnriched reports whether the flight has callsign and either aircraft or route metadata populated.
+func isEnriched(f data.FlightJSON) bool {
+	if f.Callsign == "" {
+		return false
+	}
+	hasAircraftMeta := f.Operator != "" || f.RegisteredOwner != "" || f.Manufacturer != "" || f.Model != ""
+	hasRouteMeta := f.OriginIATA != "" || f.OriginICAO != "" || f.DestIATA != "" || f.DestICAO != ""
+	return hasAircraftMeta || hasRouteMeta
+}
+
 // Send processes active flight snapshots, checks distance against the proximity threshold,
-// deduplicates per flight session, and triggers push notifications.
+// waits briefly for callsign/route enrichment if still pending, deduplicates per flight session,
+// and triggers push notifications.
 func (r *PushNotificationReceiver) Send(flights []data.FlightJSON) {
 	if r.endpointURL == "" || r.proximityThresholdKM <= 0 {
 		return
@@ -79,6 +102,7 @@ func (r *PushNotificationReceiver) Send(flights []data.FlightJSON) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	now := time.Now()
 	currentActive := make(map[string]bool, len(flights))
 
 	for _, f := range flights {
@@ -98,8 +122,23 @@ func (r *PushNotificationReceiver) Send(flights []data.FlightJSON) {
 			continue
 		}
 
+		firstPending, seen := r.pendingSince[f.HexIdent]
+		if !seen {
+			firstPending = now
+			r.pendingSince[f.HexIdent] = firstPending
+		}
+
+		// Wait briefly for callsign and adsbdb.com enrichment if the flight was just spotted
+		if r.enrichmentGracePeriod > 0 && !isEnriched(f) {
+			needsWait := f.Callsign == "" || (!f.FirstSeen.IsZero() && now.Sub(f.FirstSeen) < r.enrichmentGracePeriod)
+			if needsWait && now.Sub(firstPending) < r.enrichmentGracePeriod {
+				continue
+			}
+		}
+
 		// Mark as notified for this flight session
 		r.notified[f.HexIdent] = true
+		delete(r.pendingSince, f.HexIdent)
 
 		// Build payload and trigger notification dispatch asynchronously
 		payload := PushNotificationPayload{
@@ -130,10 +169,15 @@ func (r *PushNotificationReceiver) Send(flights []data.FlightJSON) {
 		go r.dispatchNotification(payload)
 	}
 
-	// Clean up notified state for aircraft that are no longer active
+	// Clean up notified and pending state for aircraft that are no longer active
 	for hex := range r.notified {
 		if !currentActive[hex] {
 			delete(r.notified, hex)
+		}
+	}
+	for hex := range r.pendingSince {
+		if !currentActive[hex] {
+			delete(r.pendingSince, hex)
 		}
 	}
 }

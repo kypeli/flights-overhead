@@ -81,13 +81,40 @@ func TestHTTPHandler_TestPush_MethodNotAllowed(t *testing.T) {
 	mock := &mockPushSender{}
 	handler := NewHTTPHandler(broker, mock)
 
-	req := httptest.NewRequest(http.MethodDelete, "/test-push", nil)
-	rec := httptest.NewRecorder()
+	for _, method := range []string{http.MethodGet, http.MethodDelete, http.MethodPut} {
+		req := httptest.NewRequest(method, "/test-push", nil)
+		rec := httptest.NewRecorder()
 
-	handler.ServeHTTP(rec, req)
+		handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected status 405 for DELETE /test-push, got %d", rec.Code)
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("expected status 405 for %s /test-push, got %d", method, rec.Code)
+		}
+	}
+}
+
+func TestHTTPHandler_TestPush_AuthToken(t *testing.T) {
+	t.Setenv("TEST_PUSH_TOKEN", "secret-token-123")
+
+	broker := NewSSEBroker()
+	mock := &mockPushSender{}
+	handler := NewHTTPHandler(broker, mock)
+
+	// Missing token -> 401
+	reqUnauth := httptest.NewRequest(http.MethodPost, "/test-push", nil)
+	recUnauth := httptest.NewRecorder()
+	handler.ServeHTTP(recUnauth, reqUnauth)
+	if recUnauth.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401 without token, got %d", recUnauth.Code)
+	}
+
+	// Valid token -> 200
+	reqAuth := httptest.NewRequest(http.MethodPost, "/test-push", nil)
+	reqAuth.Header.Set("Authorization", "Bearer secret-token-123")
+	recAuth := httptest.NewRecorder()
+	handler.ServeHTTP(recAuth, reqAuth)
+	if recAuth.Code != http.StatusOK {
+		t.Fatalf("expected status 200 with valid token, got %d", recAuth.Code)
 	}
 }
 

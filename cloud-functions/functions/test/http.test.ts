@@ -259,5 +259,67 @@ describe("HTTP Middleware & Authentication (http.ts)", () => {
       assert.strictEqual(res.statusCode, 200);
       assert.deepStrictEqual(res.body, { success: true, sub: "sa-12345" });
     });
+
+    it("returns 403 Forbidden when OIDC token belongs to an unauthorized email", async () => {
+      oauth2Client.verifyIdToken = (async () => ({
+        getPayload: () => ({
+          email: "attacker@other-project.iam.gserviceaccount.com",
+          sub: "sa-99999",
+        }),
+      })) as unknown as typeof oauth2Client.verifyIdToken;
+
+      let handlerCalled = false;
+      const handler = onServicePost(async (req, res) => {
+        handlerCalled = true;
+        res.status(200).send("OK");
+      });
+
+      const req = createMockRequest({
+        method: "POST",
+        headers: { authorization: "Bearer valid-other-project-token" },
+      });
+      const res = new MockResponse();
+      await handler(req, asResponse(res));
+
+      assert.strictEqual(handlerCalled, false);
+      assert.strictEqual(res.statusCode, 403);
+      assert.strictEqual(res.body, "Forbidden: Caller is not an authorized service account");
+    });
+
+    it("passes expected audience when SERVICE_AUTH_AUDIENCE is configured", async () => {
+      process.env.SERVICE_AUTH_AUDIENCE = "https://pushnotification.run.app";
+      let capturedAudience: string | string[] | undefined;
+
+      oauth2Client.verifyIdToken = (async (options: { idToken: string; audience?: string | string[] }) => {
+        capturedAudience = options.audience;
+        return {
+          getPayload: () => ({
+            email: "service-account@flights-overhead.iam.gserviceaccount.com",
+            sub: "sa-12345",
+          }),
+        } as unknown as ReturnType<typeof oauth2Client.verifyIdToken> extends Promise<infer U>
+          ? U
+          : never;
+      }) as typeof oauth2Client.verifyIdToken;
+
+      try {
+        const handler = onServicePost(async (req, res) => {
+          res.status(200).send("OK");
+        });
+
+        const req = createMockRequest({
+          method: "POST",
+          headers: { authorization: "Bearer valid-service-token" },
+        });
+        const res = new MockResponse();
+        await handler(req, asResponse(res));
+
+        assert.strictEqual(res.statusCode, 200);
+        assert.strictEqual(capturedAudience, "https://pushnotification.run.app");
+      } finally {
+        delete process.env.SERVICE_AUTH_AUDIENCE;
+      }
+    });
   });
 });
+

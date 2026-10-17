@@ -145,6 +145,29 @@ async function onAuthenticated(
 }
 
 /**
+ * Checks whether the verified OIDC token email belongs to an authorized service account.
+ *
+ * @param {string | undefined} email Email claim from the verified OIDC token.
+ * @param {boolean | undefined} emailVerified Whether the email claim is verified.
+ * @return {boolean} True if the caller is an authorized service account.
+ */
+function isAuthorizedServiceAccount(
+  email: string | undefined,
+  emailVerified: boolean | undefined,
+): boolean {
+  if (!email || emailVerified === false) {
+    return false;
+  }
+  const expectedEmail = process.env.SERVICE_ACCOUNT_EMAIL;
+  if (expectedEmail) {
+    return email === expectedEmail;
+  }
+  const projectId =
+    process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "flights-overhead";
+  return email.endsWith(`@${projectId}.iam.gserviceaccount.com`);
+}
+
+/**
  * Verifies the Google Service Account OIDC ID token and returns the caller identity.
  *
  * @param {Request} req The incoming HTTP request.
@@ -163,13 +186,23 @@ async function onServiceAuthenticated(
 
   const idToken = authHeader.split("Bearer ")[1];
   try {
-    const ticket = await oauth2Client.verifyIdToken({
-      idToken: idToken,
-    });
+    const expectedAudience = process.env.SERVICE_AUTH_AUDIENCE;
+    const ticket = await oauth2Client.verifyIdToken(
+      expectedAudience ?
+        { idToken: idToken, audience: expectedAudience } :
+        { idToken: idToken },
+    );
     const payload = ticket.getPayload();
     if (!payload || !payload.sub) {
       logger.error("Google ID token payload is missing or invalid");
       res.status(401).send("Unauthorized: Invalid ID token payload");
+      return null;
+    }
+    if (!isAuthorizedServiceAccount(payload.email, payload.email_verified)) {
+      logger.error("Unauthorized service account caller:", payload.email);
+      res
+        .status(403)
+        .send("Forbidden: Caller is not an authorized service account");
       return null;
     }
     return {
@@ -182,4 +215,5 @@ async function onServiceAuthenticated(
     return null;
   }
 }
+
 

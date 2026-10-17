@@ -6,6 +6,7 @@ import com.kypeli.flightsoverhead.data.model.User
 import com.kypeli.flightsoverhead.di.scope.ViewModelScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -30,6 +31,7 @@ interface AuthRepository {
     suspend fun getAccessToken(forceRefresh: Boolean = false): String?
 }
 
+@SingleIn(ViewModelScope::class)
 @ContributesBinding(ViewModelScope::class)
 @Inject
 class AuthRepositoryImpl : AuthRepository {

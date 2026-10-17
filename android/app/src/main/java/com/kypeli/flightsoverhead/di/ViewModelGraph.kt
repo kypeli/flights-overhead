@@ -14,9 +14,7 @@ import dev.zacsweers.metro.GraphExtension
 interface ViewModelGraph {
     val flightsViewModel: FlightsViewModel
     val authViewModel: AuthViewModel
-    val tokenRepository: TokenRepository
     val tokenService: TokenService
-    val flightNotificationService: FlightNotificationService
 
     @ContributesTo(AppScope::class)
     @GraphExtension.Factory

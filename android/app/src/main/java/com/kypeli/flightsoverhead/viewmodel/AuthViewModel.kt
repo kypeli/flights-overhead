@@ -3,14 +3,17 @@ package com.kypeli.flightsoverhead.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kypeli.flightsoverhead.data.model.User
+import com.kypeli.flightsoverhead.di.scope.ViewModelScope
 import com.kypeli.flightsoverhead.repository.AuthRepository
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+@SingleIn(ViewModelScope::class)
 @Inject
 class AuthViewModel(
     private val authRepository: AuthRepository,

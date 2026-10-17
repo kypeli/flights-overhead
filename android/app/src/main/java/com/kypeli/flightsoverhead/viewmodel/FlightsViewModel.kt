@@ -4,10 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kypeli.flightsoverhead.data.AirlineResolver
 import com.kypeli.flightsoverhead.data.model.Flight
+import com.kypeli.flightsoverhead.di.scope.ViewModelScope
 import com.kypeli.flightsoverhead.repository.AuthRepository
 import com.kypeli.flightsoverhead.repository.FlightsRepository
 import com.kypeli.flightsoverhead.service.FlightNotificationService
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +20,7 @@ import kotlinx.coroutines.launch
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
+@SingleIn(ViewModelScope::class)
 @Inject
 class FlightsViewModel(
     private val repository: FlightsRepository,
@@ -31,6 +34,9 @@ class FlightsViewModel(
     private var observeJob: Job? = null
     private var resumeStaleTimeoutJob: Job? = null
     private var previousActiveHexes: Set<String>? = null
+
+    val isObserving: Boolean
+        get() = observeJob?.isActive == true
 
     init {
         viewModelScope.launch {
@@ -55,7 +61,27 @@ class FlightsViewModel(
     }
 
     /**
-     * Arms the "stale data" loading state when the app returns to the foreground.
+     * Pauses the active Firestore snapshot listener when the UI moves to the background,
+     * avoiding unnecessary battery and Firestore read usage while the screen is not visible.
+     */
+    fun onAppPause() {
+        observeJob?.cancel()
+        observeJob = null
+        cancelResumeStaleTimeout()
+    }
+
+    /**
+     * Ensures the Firestore snapshot listener is active if a user is authenticated.
+     */
+    fun ensureObserving() {
+        if (authRepository.currentUser.value != null && observeJob == null) {
+            startObserving()
+        }
+    }
+
+    /**
+     * Arms the "stale data" loading state when the app returns to the foreground
+     * and re-attaches the Firestore snapshot listener if it was paused.
      * It stays armed until a fresh (non-cached) Firestore snapshot arrives; a
      * timeout guard covers the case where nothing changed server-side and no new
      * snapshot ever fires (e.g. empty sky, or the connection never dropped).
@@ -71,6 +97,9 @@ class FlightsViewModel(
                 resumeStaleTimeoutJob = null
                 _uiState.update { it.copy(isRefreshing = false) }
             }
+        if (observeJob == null) {
+            startObserving()
+        }
     }
 
     private fun startObserving() {
@@ -79,7 +108,7 @@ class FlightsViewModel(
         // (initial load / re-login after sign-out). Re-arming the listener over
         // existing data (e.g. refresh, notification tap) must not flash it.
         _uiState.update {
-            if (it.flights.isEmpty() && it.error == null) it.copy(isLoading = true) else it
+            if (it.flights.isEmpty() && it.error == null && !it.isRefreshing) it.copy(isLoading = true) else it
         }
         observeJob =
             viewModelScope.launch {

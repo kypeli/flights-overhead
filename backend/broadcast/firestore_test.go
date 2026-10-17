@@ -100,3 +100,13 @@ func TestFirestoreFlightsReceiver_StateTracking(t *testing.T) {
 		t.Errorf("expected lastSeen to have length 1, got: %d", len(receiver.lastSeen))
 	}
 }
+
+func TestQuantizeDistanceKM(t *testing.T) {
+	if got := quantizeDistanceKM(12.3456); got != 12.3 {
+		t.Errorf("expected 12.3, got %v", got)
+	}
+	if got := quantizeDistanceKM(12.36); got != 12.4 {
+		t.Errorf("expected 12.4, got %v", got)
+	}
+}
+

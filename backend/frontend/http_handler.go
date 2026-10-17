@@ -1,12 +1,14 @@
 package frontend
 
 import (
-	_ "embed"
 	"context"
+	"crypto/subtle"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"flights-overhead/data"
 )
@@ -21,10 +23,10 @@ type TestPushSender interface {
 
 // TestPushResponse represents the JSON response structure for the test push endpoint.
 type TestPushResponse struct {
-	Success bool                         `json:"success"`
-	Status  int                          `json:"status,omitempty"`
-	Message string                       `json:"message,omitempty"`
-	Error   string                       `json:"error,omitempty"`
+	Success bool                          `json:"success"`
+	Status  int                           `json:"status,omitempty"`
+	Message string                        `json:"message,omitempty"`
+	Error   string                        `json:"error,omitempty"`
 	Payload *data.PushNotificationPayload `json:"payload,omitempty"`
 }
 
@@ -43,12 +45,25 @@ func NewHTTPHandler(broker *SSEBroker, pushSender TestPushSender) http.Handler {
 	mux.Handle("/events", broker)
 
 	testPushHandler := func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost && r.Method != http.MethodGet {
+		if r.Method != http.MethodPost {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+
+		if expectedToken := os.Getenv("TEST_PUSH_TOKEN"); expectedToken != "" {
+			expectedHeader := "Bearer " + expectedToken
+			actualHeader := r.Header.Get("Authorization")
+			if subtle.ConstantTimeCompare([]byte(actualHeader), []byte(expectedHeader)) != 1 {
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(TestPushResponse{
+					Success: false,
+					Error:   "unauthorized",
+				})
+				return
+			}
+		}
 
 		if pushSender == nil {
 			w.WriteHeader(http.StatusServiceUnavailable)

@@ -56,11 +56,13 @@ fun FlightListScreen(
     LifecycleResumeEffect(Unit) {
         if (hasResumed) {
             viewModel.onAppResume()
+        } else {
+            viewModel.ensureObserving()
         }
         hasResumed = true
 
         onPauseOrDispose {
-            // No cleanup needed: all state lives in the ViewModel.
+            viewModel.onAppPause()
         }
     }
 

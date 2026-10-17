@@ -5,6 +5,7 @@ import (
 	"flights-overhead/data"
 	"flights-overhead/pkg/sbs"
 	"log/slog"
+	"math"
 	"reflect"
 
 	"cloud.google.com/go/firestore"
@@ -65,26 +66,33 @@ func (r *FirestoreFlightsReceiver) worker() {
 	}
 }
 
-// process writes the flight snapshot to Firestore, deleting stale documents and
-// updating changed ones. It is only ever called from the worker goroutine.
+// quantizeDistanceKM rounds distance in kilometers to 0.1 km precision so sub-100m
+// floating-point coordinate jitter does not trigger redundant Firestore writes every second.
+func quantizeDistanceKM(distanceKm float64) float64 {
+	return math.Round(distanceKm*10) / 10
+}
+
+// process writes the flight snapshot to Firestore using a batched write, deleting stale
+// documents and updating changed ones. It is only ever called from the worker goroutine.
 func (r *FirestoreFlightsReceiver) process(flights []data.FlightJSON) {
-	currentActive := make(map[string]bool)
+	currentActive := make(map[string]bool, len(flights))
 	for _, f := range flights {
 		currentActive[f.HexIdent] = true
 	}
 
-	// If there are no active flights, delete all documents in the collection
+	// If there are no active flights, delete all documents in the collection in a batch
 	if len(currentActive) == 0 {
 		docsIter := r.client.Collection("active_flights").Documents(r.ctx)
 		docs, err := docsIter.GetAll()
 		if err != nil {
 			slog.Error("failed to list Firestore documents for cleanup", "error", err)
-		} else {
+		} else if len(docs) > 0 {
+			batch := r.client.Batch()
 			for _, doc := range docs {
-				_, delErr := doc.Ref.Delete(r.ctx)
-				if delErr != nil {
-					slog.Error("failed to delete stale Firestore document", "doc", doc.Ref.ID, "error", delErr)
-				}
+				batch.Delete(doc.Ref)
+			}
+			if _, delErr := batch.Commit(r.ctx); delErr != nil {
+				slog.Error("failed to batch delete stale Firestore documents", "error", delErr)
 			}
 		}
 		// Reset tracking maps
@@ -93,25 +101,27 @@ func (r *FirestoreFlightsReceiver) process(flights []data.FlightJSON) {
 		return
 	}
 
-	// 1. Delete documents from Firestore for flights that are no longer active
+	batch := r.client.Batch()
+	batchOps := 0
+	var deletedHexes []string
+	stagedData := make(map[string]map[string]any, len(flights))
+
+	// 1. Stage deletes from Firestore for flights that are no longer active
 	for hex := range r.lastSeen {
 		if !currentActive[hex] {
-			_, err := r.client.Collection("active_flights").Doc(hex).Delete(r.ctx)
-			if err != nil {
-				slog.Error("failed to delete inactive flight from Firestore", "hex", hex, "error", err)
-			} else {
-				slog.Info("deleted inactive flight from Firestore", "hex", hex)
-			}
+			batch.Delete(r.client.Collection("active_flights").Doc(hex))
+			batchOps++
+			deletedHexes = append(deletedHexes, hex)
 		}
 	}
 
-	// 2. Upload/Update active flights
+	// 2. Stage uploads/updates for active flights whose telemetry changed
 	for _, f := range flights {
 		docRef := r.client.Collection("active_flights").Doc(f.HexIdent)
 
 		var distanceKm float64
 		if f.HasPosition && (r.baseLat != 0 || r.baseLon != 0) {
-			distanceKm = sbs.DistanceKM(r.baseLat, r.baseLon, f.Latitude, f.Longitude)
+			distanceKm = quantizeDistanceKM(sbs.DistanceKM(r.baseLat, r.baseLon, f.Latitude, f.Longitude))
 		}
 
 		// Create a map representation of the flight data to upload
@@ -145,11 +155,21 @@ func (r *FirestoreFlightsReceiver) process(flights []data.FlightJSON) {
 		if prev, ok := r.prevData[f.HexIdent]; ok && reflect.DeepEqual(prev, dataMap) {
 			continue
 		}
-		_, err := docRef.Set(r.ctx, dataMap)
-		if err != nil {
-			slog.Error("failed to write active flight to Firestore", "hex", f.HexIdent, "error", err)
+		batch.Set(docRef, dataMap)
+		batchOps++
+		stagedData[f.HexIdent] = dataMap
+	}
+
+	if batchOps > 0 {
+		if _, err := batch.Commit(r.ctx); err != nil {
+			slog.Error("failed to commit active flights batch to Firestore", "ops", batchOps, "error", err)
 		} else {
-			r.prevData[f.HexIdent] = dataMap
+			for _, hex := range deletedHexes {
+				slog.Info("deleted inactive flight from Firestore", "hex", hex)
+			}
+			for hex, dataMap := range stagedData {
+				r.prevData[hex] = dataMap
+			}
 		}
 	}
 
@@ -161,3 +181,4 @@ func (r *FirestoreFlightsReceiver) process(flights []data.FlightJSON) {
 	}
 	r.lastSeen = currentActive
 }
+
