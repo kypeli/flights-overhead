@@ -81,14 +81,14 @@ func NewPushNotificationReceiver(ctx context.Context, cfg PushReceiverConfig) *P
 	}
 }
 
-// isEnriched reports whether the flight has callsign and either aircraft or route metadata populated.
+// isEnriched reports whether the flight has callsign and both aircraft and route metadata populated.
 func isEnriched(f data.FlightJSON) bool {
 	if f.Callsign == "" {
 		return false
 	}
 	hasAircraftMeta := f.Operator != "" || f.RegisteredOwner != "" || f.Manufacturer != "" || f.Model != ""
 	hasRouteMeta := f.OriginIATA != "" || f.OriginICAO != "" || f.DestIATA != "" || f.DestICAO != ""
-	return hasAircraftMeta || hasRouteMeta
+	return hasAircraftMeta && hasRouteMeta
 }
 
 // Send processes active flight snapshots, checks distance against the proximity threshold,

@@ -148,7 +148,7 @@ describe("pushNotification endpoint (push-notification.ts)", () => {
     assert.ok(msg);
     assert.deepStrictEqual(msg.tokens, ["token-1", "token-2"]);
     assert.strictEqual(msg.notification.title, "Finnair • FIN123");
-    assert.strictEqual(msg.notification.body, "From HEL • 8.2 km away");
+    assert.strictEqual(msg.notification.body, "HEL → OUL • 8.2 km away");
     assert.strictEqual(msg.data.hex, "4601F6");
     assert.strictEqual(msg.data.callsign, "FIN123");
     assert.strictEqual(msg.data.operator, "Finnair");
@@ -160,6 +160,117 @@ describe("pushNotification endpoint (push-notification.ts)", () => {
     assert.strictEqual(msg.data.originIATA, "HEL");
     assert.strictEqual(msg.data.destination, "OUL");
     assert.strictEqual(msg.data.destIATA, "OUL");
+  });
+
+  it("formats body with city and IATA for both origin and destination", async () => {
+    let capturedMulticastMessage: unknown = null;
+
+    db.collection = (() => ({
+      get: async () => ({
+        docs: [{ id: "token-1", data: () => ({ installationId: "token-1" }) }],
+      }),
+    })) as typeof db.collection;
+
+    messaging.sendEachForMulticast = (async (message: unknown) => {
+      capturedMulticastMessage = message;
+      return { successCount: 1, failureCount: 0, responses: [] };
+    }) as typeof messaging.sendEachForMulticast;
+
+    const req = createMockRequest({
+      method: "POST",
+      headers: { authorization: "Bearer valid-token" },
+      body: {
+        hex: "4601F6",
+        callsign: "AY1337",
+        distanceKm: 4.5,
+        operator: "Finnair",
+        originCity: "Helsinki",
+        originIATA: "HEL",
+        destCity: "Tokyo",
+        destIATA: "NRT",
+      },
+    });
+    const res = new MockResponse();
+
+    await pushNotification(req, asResponse(res));
+    assert.strictEqual(res.statusCode, 200);
+
+    const msg = capturedMulticastMessage as {
+      notification: { title: string; body: string };
+    };
+    assert.strictEqual(msg.notification.body, "Helsinki (HEL) → Tokyo (NRT) • 4.5 km away");
+  });
+
+  it("formats body with origin only when destination is absent", async () => {
+    let capturedMulticastMessage: unknown = null;
+
+    db.collection = (() => ({
+      get: async () => ({
+        docs: [{ id: "token-1", data: () => ({ installationId: "token-1" }) }],
+      }),
+    })) as typeof db.collection;
+
+    messaging.sendEachForMulticast = (async (message: unknown) => {
+      capturedMulticastMessage = message;
+      return { successCount: 1, failureCount: 0, responses: [] };
+    }) as typeof messaging.sendEachForMulticast;
+
+    const req = createMockRequest({
+      method: "POST",
+      headers: { authorization: "Bearer valid-token" },
+      body: {
+        hex: "4601F6",
+        callsign: "AY1337",
+        distanceKm: 3.2,
+        originCity: "Helsinki",
+        originIATA: "HEL",
+      },
+    });
+    const res = new MockResponse();
+
+    await pushNotification(req, asResponse(res));
+    assert.strictEqual(res.statusCode, 200);
+
+    const msg = capturedMulticastMessage as {
+      notification: { title: string; body: string };
+    };
+    assert.strictEqual(msg.notification.body, "From Helsinki (HEL) • 3.2 km away");
+  });
+
+  it("formats body with destination only when origin is absent", async () => {
+    let capturedMulticastMessage: unknown = null;
+
+    db.collection = (() => ({
+      get: async () => ({
+        docs: [{ id: "token-1", data: () => ({ installationId: "token-1" }) }],
+      }),
+    })) as typeof db.collection;
+
+    messaging.sendEachForMulticast = (async (message: unknown) => {
+      capturedMulticastMessage = message;
+      return { successCount: 1, failureCount: 0, responses: [] };
+    }) as typeof messaging.sendEachForMulticast;
+
+    const req = createMockRequest({
+      method: "POST",
+      headers: { authorization: "Bearer valid-token" },
+      body: {
+        hex: "4601F6",
+        callsign: "AY1337",
+        distanceKm: 3.2,
+        destCity: "Tokyo",
+        destIATA: "NRT",
+      },
+    });
+    const res = new MockResponse();
+
+    await pushNotification(req, asResponse(res));
+    assert.strictEqual(res.statusCode, 200);
+
+    const msg = capturedMulticastMessage as {
+      notification: { title: string; body: string };
+    };
+    assert.strictEqual(msg.notification.body, "To Tokyo (NRT) • 3.2 km away");
   });
 
   it("handles fallback title and body when callsign and distance are omitted", async () => {

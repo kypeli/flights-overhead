@@ -44,6 +44,24 @@ class FlightsNotificationManagerTest {
     }
 
     @Test
+    fun extractDestination_formatsCityAndIataCode() {
+        val withCityAndIata = mapOf("destCity" to "Tokyo", "destIATA" to "NRT")
+        assertEquals("Tokyo (NRT)", FlightsNotificationManager.extractDestination(withCityAndIata))
+
+        val withCityOnly = mapOf("destCity" to "Oulu")
+        assertEquals("Oulu", FlightsNotificationManager.extractDestination(withCityOnly))
+
+        val withIataOnly = mapOf("destIATA" to "LHR")
+        assertEquals("LHR", FlightsNotificationManager.extractDestination(withIataOnly))
+
+        val withDestinationFallback = mapOf("destination" to "JFK")
+        assertEquals("JFK", FlightsNotificationManager.extractDestination(withDestinationFallback))
+
+        val withIcaoOnly = mapOf("destICAO" to "EFHK")
+        assertEquals("EFHK", FlightsNotificationManager.extractDestination(withIcaoOnly))
+    }
+
+    @Test
     fun extractNotificationTitle_formatsOperatorAndFlightNumber() {
         val data =
             mapOf(
@@ -77,7 +95,21 @@ class FlightsNotificationManagerTest {
     }
 
     @Test
-    fun extractNotificationBody_formatsOriginAndDistance() {
+    fun extractNotificationBody_formatsBothOriginAndDestinationWithDistance() {
+        val data =
+            mapOf(
+                "originCity" to "Helsinki",
+                "originIATA" to "HEL",
+                "destCity" to "Tokyo",
+                "destIATA" to "NRT",
+                "distanceKm" to "3.48",
+            )
+        val body = FlightsNotificationManager.extractNotificationBody(null, data)
+        assertEquals("Helsinki (HEL) → Tokyo (NRT) • 3.5 km away", body)
+    }
+
+    @Test
+    fun extractNotificationBody_formatsOriginOnlyWithDistance() {
         val data =
             mapOf(
                 "originCity" to "Helsinki",
@@ -89,7 +121,19 @@ class FlightsNotificationManagerTest {
     }
 
     @Test
-    fun extractNotificationBody_formatsDistanceWhenOriginMissing() {
+    fun extractNotificationBody_formatsDestinationOnlyWithDistance() {
+        val data =
+            mapOf(
+                "destCity" to "Tokyo",
+                "destIATA" to "NRT",
+                "distanceKm" to "3.48",
+            )
+        val body = FlightsNotificationManager.extractNotificationBody(null, data)
+        assertEquals("To Tokyo (NRT) • 3.5 km away", body)
+    }
+
+    @Test
+    fun extractNotificationBody_formatsDistanceWhenOriginAndDestinationMissing() {
         val data = mapOf("callsign" to "AY1337", "distanceKm" to "5.21")
         val body = FlightsNotificationManager.extractNotificationBody(null, data)
         assertEquals("AY1337 is 5.2 km away.", body)
@@ -102,7 +146,31 @@ class FlightsNotificationManagerTest {
     }
 
     @Test
-    fun extractBigText_containsAllFourDetails() {
+    fun extractBigText_containsAllFiveDetails() {
+        val data =
+            mapOf(
+                "operator" to "Finnair",
+                "callsign" to "AY1337",
+                "originCity" to "Helsinki",
+                "originIATA" to "HEL",
+                "destCity" to "Tokyo",
+                "destIATA" to "NRT",
+                "distanceKm" to "3.5",
+            )
+        val bigText = FlightsNotificationManager.extractBigText("Default body", data)
+        val expected =
+            """
+            Operator: Finnair
+            Flight: AY1337
+            Origin: Helsinki (HEL)
+            Destination: Tokyo (NRT)
+            Distance: 3.5 km away
+            """.trimIndent()
+        assertEquals(expected, bigText)
+    }
+
+    @Test
+    fun extractBigText_withoutDestinationKeepsOtherDetails() {
         val data =
             mapOf(
                 "operator" to "Finnair",

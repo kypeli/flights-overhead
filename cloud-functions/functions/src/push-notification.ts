@@ -70,11 +70,41 @@ export const pushNotification = onServicePost(async (req, res, caller) => {
         `Flight ${flightNumber} Overhead` :
         `Aircraft ${hex} Overhead`);
 
-    const originLocation = (typeof originCity === "string" &&
-      originCity.trim().length > 0 ? originCity.trim() : undefined) ||
-      (typeof originName === "string" && originName.trim().length > 0 ? originName.trim() : undefined) ||
-      (typeof originIATA === "string" && originIATA.trim().length > 0 ? originIATA.trim() : undefined) ||
-      (typeof originICAO === "string" && originICAO.trim().length > 0 ? originICAO.trim() : undefined);
+    const formatAirport = (
+      city?: unknown,
+      name?: unknown,
+      iata?: unknown,
+      icao?: unknown,
+    ): string | undefined => {
+      const c = typeof city === "string" && city.trim().length > 0 ? city.trim() : undefined;
+      const n = typeof name === "string" && name.trim().length > 0 ? name.trim() : undefined;
+      const a = typeof iata === "string" && iata.trim().length > 0 ? iata.trim() : undefined;
+      const o = typeof icao === "string" && icao.trim().length > 0 ? icao.trim() : undefined;
+
+      if (c && a && c.toLowerCase() !== a.toLowerCase()) {
+        return `${c} (${a})`;
+      }
+      if (c) return c;
+      if (n && a && n.toLowerCase() !== a.toLowerCase()) {
+        return `${n} (${a})`;
+      }
+      if (a) return a;
+      if (o) return o;
+      if (n) return n;
+      return undefined;
+    };
+
+    const originLocation = formatAirport(originCity, originName, originIATA, originICAO);
+    const destLocation = formatAirport(destCity, destName, destIATA, destICAO);
+
+    let routeText: string | undefined;
+    if (originLocation && destLocation) {
+      routeText = `${originLocation} → ${destLocation}`;
+    } else if (originLocation) {
+      routeText = `From ${originLocation}`;
+    } else if (destLocation) {
+      routeText = `To ${destLocation}`;
+    }
 
     const distanceNum = typeof distanceKm === "number" ? distanceKm : undefined;
     const distanceText = distanceNum !== undefined ?
@@ -82,10 +112,10 @@ export const pushNotification = onServicePost(async (req, res, caller) => {
       undefined;
 
     let bodyText = "";
-    if (originLocation && distanceText) {
-      bodyText = `From ${originLocation} • ${distanceText}`;
-    } else if (originLocation) {
-      bodyText = `From ${originLocation}`;
+    if (routeText && distanceText) {
+      bodyText = `${routeText} • ${distanceText}`;
+    } else if (routeText) {
+      bodyText = `${routeText}`;
     } else if (distanceText) {
       bodyText = `${distanceText}`;
     } else {

@@ -66,6 +66,23 @@ object FlightsNotificationManager {
         }
     }
 
+    fun extractDestination(data: Map<String, String>): String? {
+        val city = data["destCity"]?.trim()?.takeIf { it.isNotEmpty() }
+        val iata = (data["destIATA"] ?: data["destination"])?.trim()?.takeIf { it.isNotEmpty() }
+        val icao = data["destICAO"]?.trim()?.takeIf { it.isNotEmpty() }
+        val name = data["destName"]?.trim()?.takeIf { it.isNotEmpty() }
+
+        return when {
+            city != null && iata != null && !city.equals(iata, ignoreCase = true) -> "$city ($iata)"
+            city != null -> city
+            name != null && iata != null && !name.equals(iata, ignoreCase = true) -> "$name ($iata)"
+            iata != null -> iata
+            icao != null -> icao
+            name != null -> name
+            else -> null
+        }
+    }
+
     fun extractDistanceText(data: Map<String, String>): String? {
         val distanceKm = data["distanceKm"]?.toDoubleOrNull()
         if (distanceKm != null) {
@@ -120,13 +137,21 @@ object FlightsNotificationManager {
         }
 
         val origin = extractOrigin(data)
+        val destination = extractDestination(data)
         val distance = extractDistanceText(data)
 
-        if (origin != null && distance != null) {
-            return "From $origin • $distance"
+        val routeText = when {
+            origin != null && destination != null -> "$origin → $destination"
+            origin != null -> "From $origin"
+            destination != null -> "To $destination"
+            else -> null
         }
-        if (origin != null) {
-            return "From $origin"
+
+        if (routeText != null && distance != null) {
+            return "$routeText • $distance"
+        }
+        if (routeText != null) {
+            return routeText
         }
         if (distance != null) {
             val subject = extractFlightNumber(data) ?: "Aircraft"
@@ -147,9 +172,10 @@ object FlightsNotificationManager {
         val operator = extractOperator(data)
         val flightNumber = extractFlightNumber(data)
         val origin = extractOrigin(data)
+        val destination = extractDestination(data)
         val distance = extractDistanceText(data)
 
-        if (operator == null && flightNumber == null && origin == null && distance == null) {
+        if (operator == null && flightNumber == null && origin == null && destination == null && distance == null) {
             return body
         }
 
@@ -157,6 +183,7 @@ object FlightsNotificationManager {
         if (operator != null) parts.add("Operator: $operator")
         if (flightNumber != null) parts.add("Flight: $flightNumber")
         if (origin != null) parts.add("Origin: $origin")
+        if (destination != null) parts.add("Destination: $destination")
         if (distance != null) parts.add("Distance: $distance")
 
         return parts.joinToString("\n")

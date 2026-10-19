@@ -281,6 +281,7 @@ func TestPushNotificationReceiver_EnrichmentGracePeriod(t *testing.T) {
 	enriched.Callsign = "FIN123"
 	enriched.Operator = "Finnair"
 	enriched.OriginIATA = "HEL"
+	enriched.DestIATA = "OUL"
 
 	receiver.Send([]data.FlightJSON{enriched})
 	time.Sleep(30 * time.Millisecond)
@@ -290,8 +291,8 @@ func TestPushNotificationReceiver_EnrichmentGracePeriod(t *testing.T) {
 	}
 
 	mu.Lock()
-	if len(receivedPayloads) != 1 || receivedPayloads[0].Operator != "Finnair" || receivedPayloads[0].OriginIATA != "HEL" {
-		t.Errorf("expected enriched payload with Finnair/HEL, got %+v", receivedPayloads)
+	if len(receivedPayloads) != 1 || receivedPayloads[0].Operator != "Finnair" || receivedPayloads[0].OriginIATA != "HEL" || receivedPayloads[0].DestIATA != "OUL" {
+		t.Errorf("expected enriched payload with Finnair/HEL/OUL, got %+v", receivedPayloads)
 	}
 	mu.Unlock()
 
