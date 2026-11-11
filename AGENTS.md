@@ -35,6 +35,9 @@ flights-overhead/
 ├── CLAUDE.md                                # Symlink → AGENTS.md (used by Claude Code)
 ├── Taskfile.yml                             # Task runner automation (build/run in backend, deploy in cloud-functions)
 ├── service-account-key.json                 # Firestore service account key (gitignored, repo root)
+├── presentation/                            # Standalone HTML slide deck & docs on architecture & Metro DI
+│   ├── README.md                            # Slide deck guide and navigation instructions
+│   └── index.html                           # 48-slide self-contained HTML presentation
 ├── backend/                                 # Go ADS-B tracker (module: flights-overhead)
 │   ├── go.mod                               # Go module definition
 │   ├── flights-overhead.service.template    # Systemd service unit template for Raspberry Pi deployment
@@ -189,6 +192,7 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
 * **`FirestoreFlightsReceiver`** (`firestore.go`): Syncs flight snapshots to Cloud Firestore on a 1-second ticker (see Section 9).
 * **`PushNotificationReceiver`** (`push_receiver.go`):
   * Checks flight distance against the configured `ProximityThresholdKM` (default `15.0 km`).
+  * Enforces an `EnrichmentGracePeriod` (default 5s): if a flight is within proximity but not yet enriched with callsign, aircraft metadata, and route metadata (`isEnriched`), dispatch is briefly held pending enrichment so alerts include origin and destination airports.
   * Deduplicates per flight session using an in-memory `notified` map, ensuring each aircraft only triggers **one** push alert per pass. Purges entries when flights leave active tracking.
   * Uses Google Cloud Service Account OIDC tokens via `google.golang.org/api/idtoken` to securely call the Firebase Cloud Function `/pushNotification` endpoint.
   * Implements `TestPushSender` to support on-demand test push dispatches.
@@ -203,16 +207,16 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
 * `NewHTTPHandler(broker, pushSender)` (`http_handler.go`) wires up an explicit `http.ServeMux` with:
   * `/` — serves the compile-time embedded `dashboard.html`.
   * `/events` — SSE broker stream.
-  * `/test-push` & `/api/test-push` — accepts GET / POST requests to dispatch test push notifications to all registered client devices using the injected `TestPushSender`.
+  * `/test-push` & `/api/test-push` — accepts POST requests to dispatch test push notifications to all registered client devices using the injected `TestPushSender` (returns 405 Method Not Allowed for non-POST methods). Supports optional bearer token authentication if the `TEST_PUSH_TOKEN` environment variable is set.
 * `PrintOverheadDashboard(tracker)` (`console.go`) renders active aircraft as a formatted `tabwriter` table to stdout.
 
 ### 9. Cloud Firestore Sync Component (`sbsfirestore/` & `broadcast/firestore.go`)
 * **Client Initializer**: `NewFirestoreClient(ctx, config)` initializes the connection to Cloud Firestore using provided credentials JSON files and project IDs.
 * **Sync Receiver**: `FirestoreFlightsReceiver` implements `FlightsReceiver` and processes flight snapshots on a 1-second interval:
   * Uses a buffered channel `ch` of capacity 1 with non-blocking drain logic.
-  * Computes `distanceKm` and maps fields (`hex`, `callsign`, `latitude`, `longitude`, `altitude`, `verticalRate`, `distanceKm`, `squawk`, route, aircraft details).
+  * Computes `distanceKm` (quantized to 0.1 km to suppress redundant writes caused by GPS coordinate jitter) and maps fields (`hex`, `callsign`, `latitude`, `longitude`, `altitude`, `verticalRate`, `distanceKm`, `squawk`, route, aircraft details).
   * Compares snapshot data against `prevData` using `reflect.DeepEqual` to filter out unchanged flights, minimizing database writes.
-  * Automatically identifies and deletes inactive flights from the `active_flights` Firestore collection.
+  * Batches writes and deletions via `WriteBatch` to atomically commit all updates and evictions of inactive flights from the `active_flights` Firestore collection in a single batch operation.
 * **Security Rules** (`firestore.rules`): Permits read access on `/active_flights/{flightId}` for authenticated users (`request.auth != null`), allowing mobile clients to attach direct snapshot listeners.
 
 ### 10. Firebase Cloud Functions (`cloud-functions/functions/`)
@@ -225,13 +229,14 @@ Since SBS-1 messages transmit updates incrementally (e.g. MSG,3 updates coordina
   * **`pushNotification`** ([push-notification.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/push-notification.ts)): Service-authenticated `POST` endpoint invoked by the Go backend to multicast FCM push notifications to registered devices when an aircraft is within proximity.
 * **HTTP Authentication Helpers** ([http.ts](file:///Users/kypeli/src/own/flights-overhead/cloud-functions/functions/src/http.ts)):
   * `onGet` / `onPost`: Wraps handlers with CORS and Firebase ID Token verification (`getAuth().verifyIdToken`).
-  * `onServicePost`: Wraps service-to-service endpoints with CORS and Google Cloud Service Account OIDC ID token verification (`oauth2Client.verifyIdToken`).
+  * `onServicePost`: Wraps service-to-service endpoints with CORS and Google Cloud Service Account OIDC ID token verification (`oauth2Client.verifyIdToken`). Validates that the caller's service account matches `SERVICE_ACCOUNT_EMAIL` or the project service account (`@<project>.iam.gserviceaccount.com`) and verifies `SERVICE_AUTH_AUDIENCE` when configured, rejecting unauthorized callers with `403 Forbidden`.
 
 ### 11. Android Mobile Client (`android/`)
 * Native Android client developed in Kotlin with Jetpack Compose Material 3 and Navigation3.
 * Architecture: MVVM with reactive UI state and repository abstractions.
+  * **Dependency Injection & Scoping**: Built with Metro DI. `FlightsViewModel`, `AuthViewModel`, `FlightsRepositoryImpl`, and `AuthRepositoryImpl` are scoped to `@SingleIn(ViewModelScope::class)` to prevent duplicate instances from `ViewModelGraph`.
   * **`FlightsRepository` & Real-Time Firestore Streaming**: Uses Firestore's `addSnapshotListener` (with `MetadataChanges.INCLUDE`) on `active_flights`, exposed as a Kotlin coroutines `Flow<Result<FlightsSnapshot>>` via `callbackFlow`. Each emission carries the flight list plus an `isFromCache` flag so the UI can distinguish locally cached snapshots from fresh server data. Automatically streams live flight movements and deletions directly to the UI without polling. Also provides a one-shot `fetchActiveFlights()` that calls the authenticated `overheadFlights` Cloud Function via `FlightsApi`.
-  * **`FlightsViewModel`**: Holds the `UiState` (flights, error, `isLoading`, `isRefreshing`) and cancels notifications for flights that disappear from the active set. On app resume it arms a transient refreshing state that clears once a fresh (non-cached) snapshot arrives (or after a 5-second timeout), rendering the `LoadingState` component over stale cached data instead of flashing an empty list.
+  * **`FlightsViewModel`**: Holds the `UiState` (flights, error, `isLoading`, `isRefreshing`) and cancels notifications for flights that disappear from the active set. Features lifecycle awareness via `onAppPause()` and `ensureObserving()` (wired to `LifecycleResumeEffect` in `FlightListScreen`) to pause the active Firestore snapshot listener when the app is backgrounded, eliminating unnecessary battery and Firestore read usage. On app resume it arms a transient refreshing state that clears once a fresh (non-cached) snapshot arrives (or after a 5-second timeout), rendering the `LoadingState` component over stale cached data instead of flashing an empty list.
   * **`FlightsNotificationManager`**: Handles notification channel creation (`flights_overhead_channel`), rich notification layout formatting (`Operator • Callsign`, `Origin → Destination • X.X km away`), `BigTextStyle` multi-line expansion (including Origin and Destination), automatic dismissal on tap, and automatic dismissal of notifications for flights that are no longer actively tracked.
   * **`FlightNotificationService`**: `ViewModelScope`-bound injectable interface (Metro) wrapping `FlightsNotificationManager` for showing and cancelling notifications by hex or for inactive flights.
   * **`FlightsFirebaseMessagingService`**: Receives incoming FCM messages, extracts telemetry, and delegates display to `FlightsNotificationManager`.
