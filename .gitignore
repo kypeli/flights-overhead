@@ -5,6 +5,7 @@ skills-lock.json
 .DS_Store
 backend/bin/*
 flights-overhead.service
+presentation/
 
 # Log files
 *.log
